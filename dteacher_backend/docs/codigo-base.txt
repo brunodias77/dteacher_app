@@ -1,0 +1,2599 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, onSnapshot } from 'firebase/firestore';
+
+// ============================================
+// FIREBASE INITIALIZATION
+// ============================================
+let app, auth, db, appId;
+try {
+  const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+} catch (error) {
+  console.error("Erro ao inicializar Firebase:", error);
+}
+
+// ============================================
+// HELPERS: FETCH & GEMINI API (REFATORADO)
+// ============================================
+const fetchWithBackoff = async (url, options, retries = 5) => {
+  const delays = [1000, 2000, 4000, 8000, 16000];
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(res => setTimeout(res, delays[i]));
+    }
+  }
+};
+
+const askGemini = async (prompt, schema = null) => {
+  const apiKey = ""; 
+  const body = { contents: [{ parts: [{ text: prompt }] }] };
+  
+  if (schema) {
+    body.generationConfig = {
+      responseMimeType: "application/json",
+      responseSchema: schema
+    };
+  }
+
+  const response = await fetchWithBackoff(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  
+  if (!text) throw new Error("Sem resposta da IA");
+  return schema ? JSON.parse(text) : text;
+};
+
+// ============================================
+// STYLES & THEME
+// ============================================
+const globalStyles = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Fraunces:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap');
+
+:root {
+  --bg-0: #0a0a0b;
+  --bg-1: #111113;
+  --bg-2: #18181b;
+  --bg-3: #1f1f22;
+  --line: #26262a;
+  --line-strong: #34343a;
+  --text-hi: #f5f5f4;
+  --text-mid: #a1a1aa;
+  --text-lo: #71717a;
+  --text-dim: #52525b;
+
+  --accent: #ccf381;
+  --accent-ink: #0a0a0b;
+  --accent-soft: rgba(204, 243, 129, 0.10);
+  --accent-border: rgba(204, 243, 129, 0.35);
+
+  --danger: #f87171;
+  --warn:   #fbbf24;
+  --ok:     #86efac;
+  --info:   #93c5fd;
+}
+
+html, body { background: var(--bg-0); }
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  color: var(--text-hi);
+  font-feature-settings: "ss01","cv11";
+  -webkit-font-smoothing: antialiased;
+}
+.font-mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-feature-settings: "zero","ss02"; }
+.font-display { font-family: 'Fraunces', ui-serif, serif; font-optical-sizing: auto; }
+
+.hl-t { box-shadow: inset 0 1px 0 var(--line); }
+.hl-b { box-shadow: inset 0 -1px 0 var(--line); }
+.tnum { font-variant-numeric: tabular-nums; }
+
+.grain::before {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,0.015), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(255,255,255,0.012), transparent 40%);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #27272a; border: 2px solid var(--bg-0); }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@keyframes fadeSlide { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none;} }
+.animate-fadeSlide { animation: fadeSlide .28s cubic-bezier(.2,.8,.2,1); }
+@keyframes pulseDot { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+.pulse-dot { animation: pulseDot 1.4s ease-in-out infinite; }
+
+[data-density="compact"] .den-pad { padding: 0.75rem 1rem; }
+[data-density="cozy"]    .den-pad { padding: 1.25rem 1.5rem; }
+[data-density="roomy"]   .den-pad { padding: 1.75rem 2rem; }
+
+[data-caps="none"]    .caps-lg { text-transform: none; letter-spacing: -0.01em; }
+[data-caps="labels"]  .caps-lg { text-transform: none; letter-spacing: -0.01em; }
+[data-caps="labels"]  .caps-sm { text-transform: uppercase; letter-spacing: 0.12em; }
+[data-caps="headings"].caps-lg { text-transform: uppercase; letter-spacing: 0.02em; }
+[data-caps="headings"].caps-sm { text-transform: uppercase; letter-spacing: 0.12em; }
+
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+.brand-mark {
+  width: 28px; height: 28px; display: inline-grid;
+  grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px;
+  background: var(--bg-0);
+}
+.brand-mark i { background: var(--text-hi); display: block; }
+.brand-mark i:first-child { background: var(--accent); }
+
+.tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10.5px;
+  padding: 3px 7px; letter-spacing: 0.1em; text-transform: uppercase;
+  border: 1px solid var(--line); color: var(--text-mid); background: var(--bg-1);
+}
+.tag.accent { border-color: var(--accent-border); color: var(--accent); background: var(--accent-soft); }
+
+.chip-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11.5px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 9px 12px; border: 1px solid var(--line);
+  background: var(--bg-1); color: var(--text-hi);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.chip-btn:hover { border-color: var(--line-strong); color: var(--text-hi); }
+.chip-btn.active { border-color: var(--accent); color: var(--accent-ink); background: var(--accent); }
+.chip-btn.ghost { background: transparent; }
+
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--accent); color: var(--accent-ink);
+  font-weight: 700; font-size: 13px;
+  padding: 12px 18px; border: 1px solid var(--accent);
+  transition: filter .15s, transform .05s;
+}
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:active { transform: translateY(1px); }
+.btn-primary:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: transparent; color: var(--text-hi);
+  font-weight: 600; font-size: 13px;
+  padding: 11px 16px; border: 1px solid var(--line-strong);
+  transition: border-color .15s, color .15s;
+}
+.btn-ghost:hover { border-color: var(--text-lo); }
+
+.surface { background: var(--bg-1); border: 1px solid var(--line); }
+.surface-2 { background: var(--bg-2); border: 1px solid var(--line); }
+.input {
+  background: var(--bg-0); border: 1px solid var(--line-strong); color: var(--text-hi);
+  padding: 14px 16px; width: 100%;
+  transition: border-color .15s;
+}
+.input:focus { outline: none; border-color: var(--accent); }
+
+kbd {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  padding: 2px 5px; border: 1px solid var(--line-strong);
+  color: var(--text-mid); background: var(--bg-2);
+}
+
+.ascii-dots { font-family: 'JetBrains Mono', monospace; white-space: pre; letter-spacing: 0.15em; line-height: 1.4; color: var(--text-dim); }
+.w-hover { cursor: pointer; padding: 0 2px; margin: 0 -2px; border-bottom: 1px dashed transparent; transition: all .12s; }
+.w-hover:hover { background: var(--accent); color: var(--accent-ink); border-bottom-color: var(--accent-ink); }
+.seg { display: flex; gap: 2px; height: 4px; }
+.seg > span { flex: 1; background: var(--line); }
+.seg > span.on { background: var(--accent); }
+
+.wave { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+.wave b { display: block; width: 2px; background: var(--accent); border-radius: 1px; animation: waveb 1s ease-in-out infinite; }
+.wave b:nth-child(1){ height: 40%; animation-delay: 0s; }
+.wave b:nth-child(2){ height: 80%; animation-delay: .1s; }
+.wave b:nth-child(3){ height: 60%; animation-delay: .2s; }
+.wave b:nth-child(4){ height: 100%;animation-delay: .15s; }
+.wave b:nth-child(5){ height: 55%; animation-delay: .3s; }
+.wave b:nth-child(6){ height: 30%; animation-delay: .25s; }
+@keyframes waveb { 0%,100%{ transform: scaleY(0.6);} 50%{ transform: scaleY(1.3);} }
+`;
+
+const ACCENT_MAP = {
+  lime:    { color: '#ccf381', soft: 'rgba(204,243,129,0.10)', border: 'rgba(204,243,129,0.35)' },
+  amber:   { color: '#fbbf24', soft: 'rgba(251,191,36,0.10)',  border: 'rgba(251,191,36,0.35)' },
+  cyan:    { color: '#67e8f9', soft: 'rgba(103,232,249,0.10)', border: 'rgba(103,232,249,0.35)' },
+  magenta: { color: '#f0abfc', soft: 'rgba(240,171,252,0.12)', border: 'rgba(240,171,252,0.40)' },
+  white:   { color: '#f5f5f4', soft: 'rgba(245,245,244,0.08)', border: 'rgba(245,245,244,0.30)' },
+};
+
+const TABS = [
+  { id: 'generator',  label: 'Gerar',    icon: 'sparkles', num: '01' },
+  { id: 'flashcards', label: 'Cartões',  icon: 'layers',   num: '02' },
+  { id: 'vocabulary', label: 'Vocab',    icon: 'bookmark', num: '03' },
+  { id: 'textStudy',  label: 'Texto',    icon: 'text',     num: '04' },
+  { id: 'tutor',      label: 'Tutor IA', icon: 'brain',    num: '05' },
+  { id: 'fillin',     label: 'Completar',icon: 'kbd',      num: '06' },
+  { id: 'phonetics',  label: 'Fonética', icon: 'zap',      num: '07' },
+  { id: 'immersion',  label: 'Imersão',  icon: 'book',     num: '08' },
+];
+
+// ============================================
+// SHARED COMPONENTS
+// ============================================
+const Icon = ({ name, size = 16, stroke = 1.5, className = "" }) => {
+  const paths = {
+    sparkles: <g><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/></g>,
+    layers:   <g><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></g>,
+    bookmark: <g><path d="M6 3h12v18l-6-4-6 4V3z"/></g>,
+    text:     <g><path d="M4 6h16M4 12h16M4 18h10"/></g>,
+    chat:     <g><path d="M21 12a8 8 0 1 0-3 6.2L21 21l-.8-3.2A8 8 0 0 0 21 12z"/></g>,
+    brain:    <g><path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 1 4 3 3 0 0 0 4 3 3 3 0 0 0 3-1V5a3 3 0 0 0-3-1z"/><path d="M15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-1 4 3 3 0 0 1-4 3 3 3 0 0 1-3-1V5a3 3 0 0 1 3-1z"/></g>,
+    play:     <g><path d="M7 4l13 8-13 8V4z"/></g>,
+    pause:    <g><path d="M7 4h4v16H7zM13 4h4v16h-4z"/></g>,
+    plus:     <g><path d="M12 5v14M5 12h14"/></g>,
+    minus:    <g><path d="M5 12h14"/></g>,
+    check:    <g><path d="M4 12l5 5L20 6"/></g>,
+    x:        <g><path d="M6 6l12 12M18 6L6 18"/></g>,
+    arrow:    <g><path d="M5 12h14M13 6l6 6-6 6"/></g>,
+    rotate:   <g><path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5"/></g>,
+    volume:   <g><path d="M4 9h4l5-4v14l-5-4H4V9z"/><path d="M17 8a5 5 0 0 1 0 8"/></g>,
+    send:     <g><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></g>,
+    loader:   <g><path d="M12 3v3M12 18v3M5 12H2M22 12h-3M5.5 5.5l2 2M16.5 16.5l2 2M5.5 18.5l2-2M16.5 7.5l2-2"/></g>,
+    flame:    <g><path d="M12 3c1 4 5 5 5 10a5 5 0 0 1-10 0c0-3 2-4 2-6 0 0 2 1 3-4z"/></g>,
+    settings: <g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.7h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></g>,
+    book:     <g><path d="M4 4h7a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4V4zM20 4h-7a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h8V4z"/></g>,
+    bulb:     <g><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.7.5 1 1.3 1 2.1V18h6v-1.2c0-.8.3-1.6 1-2.1A7 7 0 0 0 12 2z"/></g>,
+    kbd:      <g><rect x="2" y="6" width="20" height="12" rx="1"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></g>,
+    eye:      <g><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></g>,
+    alert:    <g><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></g>,
+    home:     <g><path d="M3 12l9-8 9 8M5 10v10h14V10"/></g>,
+    menu:     <g><path d="M3 6h18M3 12h18M3 18h18"/></g>,
+    command:  <g><path d="M9 3a3 3 0 1 1 0 6h12a3 3 0 1 1-6 0V3a3 3 0 0 1 6 0v18a3 3 0 1 1-6 0V9H9a3 3 0 1 1 0-6z"/></g>,
+    check2:   <g><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></g>,
+    circle:   <g><circle cx="12" cy="12" r="9"/></g>,
+    trophy:   <g><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3"/></g>,
+    zap:      <g><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></g>,
+  };
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round"
+      className={className}>
+      {paths[name] || paths.circle}
+    </svg>
+  );
+};
+
+const Spinner = ({ size = 14 }) => (
+  <span className="inline-block" style={{ width: size, height: size }}>
+    <svg className="animate-spin" viewBox="0 0 24 24" width={size} height={size} fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2.5"/>
+      <path d="M21 12a9 9 0 0 1-9 9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  </span>
+);
+
+const Tag = ({ children, accent = false, mono = true }) => (
+  <span className={`tag ${accent ? "accent" : ""}`} style={!mono ? {fontFamily:'Inter'}:{}}>{children}</span>
+);
+
+const KeyHint = ({ keys }) => (
+  <span className="inline-flex items-center gap-1">
+    {keys.map((k, i) => <kbd key={i}>{k}</kbd>)}
+  </span>
+);
+
+const SectionHead = ({ eyebrow, title, right }) => (
+  <div className="flex items-end justify-between gap-4 mb-5">
+    <div>
+      {eyebrow && <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">{eyebrow}</div>}
+      <h2 className="caps-lg text-[22px] font-semibold text-[var(--text-hi)] tracking-tight">{title}</h2>
+    </div>
+    {right && <div>{right}</div>}
+  </div>
+);
+
+const AudioPill = ({ playing, loading, onPlay, speed = 1, onSpeed }) => (
+  <div className="inline-flex items-stretch border border-[var(--line-strong)] bg-[var(--bg-1)]">
+    <button onClick={onPlay} disabled={loading} className="flex items-center gap-2 px-3 py-2 border-r border-[var(--line)] hover:bg-[var(--bg-2)] disabled:opacity-50">
+      {loading ? <Spinner size={14}/> : playing ? <div className="wave"><b/><b/><b/><b/><b/><b/></div> : <Icon name="play" size={14}/>}
+    </button>
+    <button onClick={() => onSpeed(-1)} className="px-2 text-[var(--text-lo)] hover:text-[var(--text-hi)] hover:bg-[var(--bg-2)] border-r border-[var(--line)]">
+      <Icon name="minus" size={12}/>
+    </button>
+    <span className="px-2 py-2 font-mono text-[11px] text-[var(--text-mid)] tabular-nums w-[42px] text-center select-none">{speed}×</span>
+    <button onClick={() => onSpeed(1)} className="px-2 text-[var(--text-lo)] hover:text-[var(--text-hi)] hover:bg-[var(--bg-2)] border-l border-[var(--line)]">
+      <Icon name="plus" size={12}/>
+    </button>
+  </div>
+);
+
+const ClickableSentence = ({ text, onWord, className = "" }) => (
+  <span className={className}>
+    {text.split(/(\s+)/).map((part, i) => {
+      if (/^\s+$/.test(part)) return <span key={i}>{part}</span>;
+      const clean = part.replace(/[.,!?;:()"'—]/g, '');
+      return (
+        <span
+          key={i}
+          onClick={() => onWord && onWord(clean)}
+          className="w-hover"
+          title="Criar flashcard desta palavra"
+        >{part}</span>
+      );
+    })}
+  </span>
+);
+
+const Empty = ({ icon, title, sub, action }) => (
+  <div className="surface p-10 flex flex-col items-center text-center">
+    <div className="ascii-dots mb-6 text-[11px] leading-[1.2] text-[var(--text-dim)]">
+{`·  ·  ·  ·  ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ( )   ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ·  ·  ·  ·  ·`}
+    </div>
+    {icon && <div className="mb-4 text-[var(--text-lo)]">{icon}</div>}
+    <div className="font-display text-[26px] text-[var(--text-hi)] leading-tight mb-2">{title}</div>
+    {sub && <div className="text-[var(--text-mid)] text-[13px] max-w-sm">{sub}</div>}
+    {action && <div className="mt-6">{action}</div>}
+  </div>
+);
+
+// ============================================
+// SCREEN COMPONENTS
+// ============================================
+
+const GeneratorScreen = ({ words, setWords, addToDeck, pickWord, audio }) => {
+  const [sentences, setSentences] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [addedCards, setAddedCards] = useState(new Set());
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const generate = async () => {
+    if (!words.trim()) return;
+    setLoading(true);
+    setErrorMsg('');
+
+    try {
+      const prompt = `Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
+Gere até 5 frases naturais em inglês utilizando as seguintes palavras ou expressões: ${words}.
+As frases devem ser úteis para o dia a dia.
+Retorne APENAS um array de objetos JSON, onde cada objeto contém:
+- "english": a frase em inglês.
+- "portuguese": a tradução da frase para o Português do Brasil (PT-BR).`;
+
+      const result = await askGemini(prompt, {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: { english: { type: "STRING" }, portuguese: { type: "STRING" } },
+          required: ["english", "portuguese"]
+        }
+      });
+      setSentences(result);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Desculpe, ocorreu um erro ao gerar as frases. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddAll = () => {
+    sentences.forEach((s, i) => {
+      setAddedCards(prev => new Set(prev).add(i));
+      addToDeck(s);
+    });
+  };
+
+  const handleAdd = (item, idx) => {
+    setAddedCards(prev => new Set(prev).add(idx));
+    addToDeck(item);
+  };
+
+  return (
+    <div className="animate-fadeSlide space-y-10">
+      <div>
+        <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">01 · Gerador</div>
+        <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight max-w-[28ch]">
+          Que palavras quer <span className="font-display italic text-[var(--accent)]">praticar</span> hoje?
+        </h1>
+        <p className="text-[var(--text-mid)] text-[14px] mt-3 max-w-[52ch]">
+          Escreva até cinco palavras. A IA gera frases naturais, traduções e vocabulário — tudo em segundos.
+        </p>
+      </div>
+
+      <div className="surface p-5 sm:p-6">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <input
+              className="input pr-28 font-mono text-[14px]"
+              placeholder="travel, airport, ticket"
+              value={words}
+              onChange={(e) => setWords(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && generate()}
+            />
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+              <KeyHint keys={['⏎']} />
+            </div>
+          </div>
+          <button onClick={generate} disabled={loading} className="btn-primary justify-center">
+            {loading ? <><Spinner/> A gerar</> : <><Icon name="sparkles" size={14}/> Gerar frases</>}
+          </button>
+        </div>
+
+        {errorMsg && (
+            <div className="mt-3 text-[13px] text-[var(--danger)] flex items-center gap-2">
+                <Icon name="alert" size={14}/> {errorMsg}
+            </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <span className="caps-sm font-mono text-[10.5px] text-[var(--text-dim)] mr-2 self-center">Sugestões:</span>
+          {['small talk','commute','ordering coffee','remote work','weekend plans'].map((t) => (
+            <button key={t} onClick={() => setWords(t)} className="tag hover:border-[var(--line-strong)] hover:text-[var(--text-hi)]">{t}</button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <SectionHead
+          eyebrow="Resultados"
+          title={sentences.length > 0 ? `${sentences.length} frases geradas` : "Resultados"}
+          right={
+            sentences.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Tag>{sentences.length} frases</Tag>
+                <button onClick={handleAddAll} className="chip-btn ghost">
+                  <Icon name="plus" size={12}/> Adicionar todas
+                </button>
+              </div>
+            )
+          }
+        />
+        {sentences.length === 0 ? (
+          <Empty icon={<Icon name="sparkles" size={24}/>} title="A aguardar palavras" sub="Escreva palavras no campo acima e gere frases reais com a inteligência artificial." />
+        ) : (
+          <div className="space-y-3">
+            {sentences.map((item, idx) => {
+              const id = `gen-${idx}`;
+              const isAdded = addedCards.has(idx);
+              const sp = audio.speeds[id] || 1;
+              return (
+                <div key={idx} className="surface den-pad group hover:border-[var(--line-strong)] transition-colors">
+                  <div className="flex items-start gap-5">
+                    <div className="font-mono text-[11px] text-[var(--text-dim)] pt-1 tnum">
+                      {String(idx + 1).padStart(2, "0")}
+                    </div>
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="text-[20px] leading-snug text-[var(--text-hi)] font-medium caps-body" style={{textWrap:"pretty"}}>
+                        <ClickableSentence text={item.english} onWord={pickWord}/>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="text-[13px] text-[var(--text-mid)] blur-sm hover:blur-none transition-all duration-300 cursor-help" title="Ver tradução">{item.portuguese}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <AudioPill
+                        playing={audio.playingId === id}
+                        loading={audio.loadingId === id}
+                        onPlay={() => audio.playAudio(item.english, id)}
+                        speed={sp}
+                        onSpeed={(dir) => audio.changeSpeed(id, dir)}
+                      />
+                      <button
+                        onClick={() => handleAdd(item, idx)}
+                        disabled={isAdded}
+                        className={`chip-btn ${isAdded ? "active" : ""}`}
+                        title="Adicionar ao deck"
+                      >
+                        {isAdded ? <><Icon name="check" size={12}/> Adicionado</> : <><Icon name="plus" size={12}/> Adicionar</>}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const FlashcardsScreen = ({ deck, updateCard, stats, audio, setTab }) => {
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [reviewMode, setReviewMode] = useState('classic');
+  const [userInput, setUserInput] = useState('');
+
+  const dueCards = deck.filter(c => c.nextReview <= Date.now());
+  const currentCard = dueCards[0];
+
+  const normalizeStr = (s) => (s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.,!?;:]/g, '').trim();
+  const checkAnswer = (input, ans) => {
+    if (!input || !ans) return false;
+    const ni = normalizeStr(input);
+    if (ni === normalizeStr(ans)) return true;
+    return ans.split(/,|\/|\bou\b/i).some(p => normalizeStr(p) === ni);
+  };
+
+  const grade = (g) => {
+    if (!currentCard) return;
+    const now = Date.now();
+    const base = { again: 60*1000, hard: 10*60*1000, good: 24*60*60*1000, easy: 4*24*60*60*1000 }[g];
+    
+    updateCard(currentCard.id, { 
+      nextReview: now + base, 
+      repetitions: (currentCard.repetitions || 0) + 1 
+    });
+    setIsFlipped(false);
+    setUserInput('');
+  };
+
+  if (deck.length === 0) {
+    return (
+      <div className="animate-fadeSlide">
+        <div className="mb-8">
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">02 · Revisão</div>
+          <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight">
+            Deck <span className="font-display italic text-[var(--accent)]">vazio</span>.
+          </h1>
+        </div>
+        <Empty
+          icon={<Icon name="layers" size={24}/>}
+          title="Ainda não tem cartões."
+          sub="Gere novas frases ou analise textos para adicionar flashcards ao seu deck de memorização."
+          action={
+            <button className="btn-primary" onClick={() => setTab('generator')}>
+              <Icon name="sparkles" size={14}/> Ir para o Gerador
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (dueCards.length === 0) {
+    return (
+      <div className="animate-fadeSlide">
+        <div className="mb-8">
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">02 · Revisão</div>
+          <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight">
+            Tudo em <span className="font-display italic text-[var(--accent)]">dia</span>.
+          </h1>
+        </div>
+        <Empty
+          icon={<Icon name="check" size={24}/>}
+          title="Já reviu tudo por hoje."
+          sub="Volte daqui a algumas horas quando novos cartões estiverem prontos, ou gere novas frases e adicione-as ao deck."
+          action={
+            <div className="flex gap-2 justify-center">
+              <button className="btn-primary" onClick={() => setTab('generator')}>
+                <Icon name="sparkles" size={14}/> Gerar frases
+              </button>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
+
+  const progress = Math.max(5, ((deck.length - dueCards.length) / deck.length) * 100);
+  const card = currentCard;
+  const isCorrect = checkAnswer(userInput, card.portuguese);
+
+  return (
+    <div className="animate-fadeSlide max-w-[720px] mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div>
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">02 · Revisão</div>
+          <h1 className="caps-lg text-[32px] font-semibold leading-[1.05] tracking-tight">A rever o deck</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Tag><Icon name="flame" size={11}/> {stats.streak} dias</Tag>
+          <Tag accent>{dueCards.length} a rever</Tag>
+          <Tag>{deck.length} total</Tag>
+        </div>
+      </div>
+
+      <div className="mb-5">
+        <div className="flex justify-between text-[11px] font-mono caps-sm text-[var(--text-lo)] mb-2">
+          <span>Progresso</span>
+          <span className="tnum">{Math.round(progress)}%</span>
+        </div>
+        <div className="seg">
+          {Array.from({length: 20}).map((_, i) => (
+            <span key={i} className={i < Math.round(progress / 5) ? "on" : ""}/>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mb-4">
+        <div className="inline-flex border border-[var(--line)]">
+          <button onClick={() => setReviewMode('classic')}
+            className={`chip-btn ghost border-0 border-r border-[var(--line)] ${reviewMode === 'classic' ? 'active' : ''}`}>
+            <Icon name="eye" size={12}/> Clássico
+          </button>
+          <button onClick={() => setReviewMode('typing')}
+            className={`chip-btn ghost border-0 ${reviewMode === 'typing' ? 'active' : ''}`}>
+            <Icon name="kbd" size={12}/> Escrita
+          </button>
+        </div>
+        <div className="font-mono text-[11px] text-[var(--text-dim)] tnum">
+          {deck.length - dueCards.length + 1} / {deck.length}
+        </div>
+      </div>
+
+      <div className="surface-2 relative overflow-hidden">
+        <div className="absolute top-0 left-0 h-[2px] bg-[var(--accent)] transition-all" style={{ width: `${progress}%` }}/>
+
+        <div className="p-8 sm:p-12 min-h-[280px] flex flex-col items-center justify-center text-center">
+          <div className="caps-sm font-mono text-[10.5px] text-[var(--text-dim)] mb-5">Frente · EN</div>
+          <div className="font-display text-[32px] sm:text-[36px] leading-[1.15] tracking-tight text-[var(--text-hi)] max-w-[24ch]" style={{textWrap:"balance"}}>
+            {card.english}
+          </div>
+
+          {!isFlipped && reviewMode === 'typing' && (
+            <div className="mt-8 w-full max-w-lg">
+              <input
+                autoFocus
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && userInput.trim() && setIsFlipped(true)}
+                placeholder="Escreva a tradução…"
+                className="input text-center"
+              />
+            </div>
+          )}
+
+          {isFlipped && (
+            <div className="animate-fadeSlide w-full mt-10 space-y-6">
+              <div className="w-8 h-px bg-[var(--line-strong)] mx-auto"/>
+              <div>
+                <div className="caps-sm font-mono text-[10.5px] text-[var(--accent)] mb-3">Verso · PT</div>
+                <div className="text-[22px] text-[var(--text-hi)] font-medium">{card.portuguese}</div>
+              </div>
+
+              {reviewMode === 'typing' && (
+                <div className={`max-w-lg mx-auto p-4 border ${isCorrect ? "border-[var(--accent-border)] bg-[var(--accent-soft)]" : "border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.05)]"}`}>
+                  <div className="caps-sm font-mono text-[10px] mb-1 text-[var(--text-lo)]">A sua resposta</div>
+                  <div className={`font-medium ${isCorrect ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}>
+                    {userInput || '—'}
+                  </div>
+                </div>
+              )}
+
+              <button onClick={() => audio.playAudio(card.english, `card-${card.id}`)} className="btn-ghost mx-auto min-w-[160px] justify-center">
+                {audio.loadingId === `card-${card.id}` ? (
+                  <Spinner/>
+                ) : audio.playingId === `card-${card.id}` ? (
+                  <div className="wave"><b/><b/><b/><b/><b/><b/></div>
+                ) : (
+                  <Icon name="volume" size={14}/>
+                )}
+                {audio.playingId === `card-${card.id}` ? "A reproduzir..." : "Ouvir pronúncia"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        {!isFlipped ? (
+          <button onClick={() => setIsFlipped(true)}
+            disabled={reviewMode === 'typing' && !userInput.trim()}
+            className="w-full btn-ghost justify-center py-4 hover:border-[var(--accent)] hover:text-[var(--accent)]">
+            {reviewMode === 'typing' ? "Verificar resposta" : "Mostrar resposta"}
+            <Icon name="arrow" size={14}/>
+          </button>
+        ) : (
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              { k: 'again', label: 'Errei',  sub: '<1 min', color: 'var(--danger)', icon: 'rotate' },
+              { k: 'hard',  label: 'Difícil', sub: '10 min', color: 'var(--warn)',  icon: 'x' },
+              { k: 'good',  label: 'Bom',     sub: '1 dia',  color: 'var(--info)',  icon: 'check' },
+              { k: 'easy',  label: 'Fácil',   sub: '4 dias', color: 'var(--accent)',icon: 'zap' },
+            ].map((g) => (
+              <button key={g.k} onClick={() => grade(g.k)}
+                className="surface-2 py-4 flex flex-col items-center gap-1 hover:border-[color:var(--line-strong)] transition-colors group"
+                style={{ borderColor: 'var(--line)' }}
+                onMouseEnter={(e) => e.currentTarget.style.borderColor = g.color}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--line)'}>
+                <div style={{ color: g.color }} className="transition-transform group-hover:scale-110">
+                  <Icon name={g.icon} size={18}/>
+                </div>
+                <div className="caps-sm text-[11px] font-mono text-[var(--text-hi)]">{g.label}</div>
+                <div className="font-mono text-[10px] text-[var(--text-dim)] tnum">{g.sub}</div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const VocabularyScreen = ({ studiedWords, addWordToVocab, practiceWord, simulateChat }) => {
+  const [manualWord, setManualWord] = useState('');
+  const [addingWord, setAddingWord] = useState(false);
+  const [filter, setFilter] = useState('');
+
+  const handleAdd = async () => {
+    if (!manualWord.trim()) return;
+    setAddingWord(true);
+    await addWordToVocab(manualWord);
+    setAddingWord(false);
+    setManualWord('');
+  };
+
+  const filtered = studiedWords.filter(w => w.word.toLowerCase().includes(filter.toLowerCase()) || w.translation.toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <div className="animate-fadeSlide space-y-8">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">03 · Vocabulário</div>
+          <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight">
+            {studiedWords.length} palavras <span className="font-display italic text-[var(--text-mid)]">estudadas</span>
+          </h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Tag><Icon name="flame" size={11}/>+{Math.min(studiedWords.length, 8)} esta semana</Tag>
+        </div>
+      </div>
+
+      <div className="surface p-4 flex flex-col lg:flex-row gap-3">
+        <div className="flex gap-2 flex-1">
+          <input
+            value={manualWord}
+            onChange={(e) => setManualWord(e.target.value)}
+            placeholder="Adicionar nova palavra…"
+            className="input flex-1 py-3"
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+          />
+          <button onClick={handleAdd} disabled={addingWord || !manualWord.trim()} className="btn-ghost">
+            {addingWord ? <Spinner/> : <Icon name="plus" size={14}/>} Add
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filtrar…"
+            className="input py-3 lg:w-[220px]"
+          />
+          <button onClick={simulateChat} className="btn-primary">
+            <Icon name="chat" size={14}/> Praticar no chat
+          </button>
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Empty icon={<Icon name="bookmark" size={24}/>} title="Ainda nenhuma palavra." sub="Gere frases ou adicione palavras manualmente para começar o seu vocabulário."/>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map((item, idx) => (
+            <div key={idx} className="surface p-5 hover:border-[var(--line-strong)] transition-colors group">
+              <div className="flex items-baseline justify-between mb-3 gap-3">
+                <div className="flex items-baseline gap-2 min-w-0 flex-1">
+                  <span className="font-mono text-[10px] text-[var(--text-dim)] tnum">{String(idx + 1).padStart(3, "0")}</span>
+                  <h3 className="text-[20px] font-semibold text-[var(--text-hi)] truncate" title={item.word}>{item.word}</h3>
+                </div>
+                <span className="font-mono text-[10.5px] text-[var(--accent)] text-right max-w-[55%] leading-relaxed">{item.translation}</span>
+              </div>
+              <div className="border-l-2 border-[var(--line)] pl-3 space-y-1.5">
+                <p className="text-[13px] text-[var(--text-mid)] italic font-display">"{item.example}"</p>
+                {item.exampleTranslation && <p className="text-[12px] text-[var(--text-dim)] blur-sm hover:blur-none transition-all duration-300 cursor-help" title="Ver tradução">{item.exampleTranslation}</p>}
+              </div>
+              <div className="flex items-center gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button className="chip-btn ghost"><Icon name="volume" size={12}/></button>
+                <button onClick={() => practiceWord(item.word)} className="chip-btn ghost">
+                  <Icon name="sparkles" size={12}/> Praticar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TextStudyScreen = ({ addToDeck, pickWord, startTextChat, audio }) => {
+  const [textInput, setTextInput] = useState('');
+  const [textResult, setTextResult] = useState(null);
+  const [studying, setStudying] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const studyText = async () => {
+    if (!textInput.trim()) return;
+    setStudying(true);
+    setErrorMsg('');
+
+    try {
+      const prompt = `Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
+Analise o seguinte texto em inglês e crie um material de estudo detalhado:
+"${textInput}"
+
+Retorne APENAS um objeto JSON com a seguinte estrutura:
+- "overview": Um breve resumo contextual em Português do Brasil (PT-BR) sobre o que o texto trata (1 ou 2 frases).
+- "analysis": Um array separando o texto em frases ou segmentos principais. Cada objeto deve ter:
+    - "original": a frase ou segmento em inglês.
+    - "translation": a tradução para PT-BR.
+    - "notes": explicações em PT-BR sobre vocabulário interessante, gírias ou gramática dessa frase (não use formatação markdown).
+- "ankiCards": Um array com 3 ou 4 cartões de memorização extraídos deste texto. Cada cartão com:
+    - "front": uma frase curta em inglês contendo uma palavra importante do texto.
+    - "back": a tradução em PT-BR.`;
+
+      const result = await askGemini(prompt, {
+        type: "OBJECT",
+        properties: {
+          overview: { type: "STRING" },
+          analysis: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                original: { type: "STRING" },
+                translation: { type: "STRING" },
+                notes: { type: "STRING" }
+              },
+              required: ["original", "translation", "notes"]
+            }
+          },
+          ankiCards: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                front: { type: "STRING" },
+                back: { type: "STRING" }
+              },
+              required: ["front", "back"]
+            }
+          }
+        },
+        required: ["overview", "analysis", "ankiCards"]
+      });
+
+      setTextResult(result);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Falha ao analisar texto. Por favor, tente novamente.");
+      setTextResult(null); 
+    } finally {
+      setStudying(false);
+    }
+  };
+
+  const handleAddAllAnki = () => {
+    if (textResult?.ankiCards) {
+      textResult.ankiCards.forEach(c => addToDeck(c));
+    }
+  };
+
+  return (
+    <div className="animate-fadeSlide space-y-8">
+      <div>
+        <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">04 · Texto</div>
+        <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight max-w-[24ch]">
+          Decifre <span className="font-display italic text-[var(--accent)]">qualquer</span> texto em inglês.
+        </h1>
+        <p className="text-[var(--text-mid)] text-[14px] mt-3 max-w-[52ch]">
+          Cole a letra de uma música, um diálogo de filme ou um artigo. A IA faz uma análise linha a linha e gera cartões prontos.
+        </p>
+      </div>
+
+      <div className="surface p-6">
+        <textarea
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          placeholder="Cole o seu texto em inglês aqui…"
+          rows={5}
+          className="input font-mono text-[13px] resize-none leading-relaxed"
+        />
+        {errorMsg && (
+            <div className="mt-3 text-[13px] text-[var(--danger)] flex items-center gap-2">
+                <Icon name="alert" size={14}/> {errorMsg}
+            </div>
+        )}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4">
+          <div className="flex items-center gap-2">
+            <Tag>{(textInput || "").length} chars</Tag>
+            <Tag>{(textInput || "").split(/\s+/).filter(Boolean).length} palavras</Tag>
+          </div>
+          <button onClick={studyText} disabled={studying || !textInput.trim()} className="btn-primary">
+            {studying ? <><Spinner/> A analisar</> : <><Icon name="sparkles" size={14}/> Analisar texto</>}
+          </button>
+        </div>
+      </div>
+
+      {!textResult ? (
+        <div className="mt-8">
+          <Empty icon={<Icon name="book" size={24}/>} title="Nenhum texto analisado" sub="Cole um texto na caixa acima e clique em 'Analisar texto' para ver o material de estudo gerado em tempo real." />
+        </div>
+      ) : (
+        <div className="space-y-10">
+          <div className="surface p-6">
+            <div className="caps-sm font-mono text-[11px] text-[var(--accent)] mb-3 flex items-center gap-2">
+              <Icon name="book" size={12}/> Visão geral
+            </div>
+            <p className="font-display text-[20px] leading-relaxed text-[var(--text-hi)] italic" style={{textWrap:"pretty"}}>
+              "{textResult.overview}"
+            </p>
+          </div>
+
+          <div>
+            <SectionHead
+              eyebrow="04.1 · Linha a linha"
+              title="Análise detalhada"
+              right={<button onClick={startTextChat} className="chip-btn ghost"><Icon name="chat" size={12}/> Conversar sobre o texto</button>}
+            />
+            <div className="space-y-2">
+              {textResult.analysis.map((item, idx) => (
+                <div key={idx} className="surface-2 hover:border-[var(--line-strong)] transition-colors">
+                  <div className="p-5 flex items-start gap-4">
+                    <div className="font-mono text-[11px] text-[var(--text-dim)] pt-1 tnum flex-shrink-0 w-6">{String(idx + 1).padStart(2, "0")}</div>
+                    <div className="flex-1 min-w-0 space-y-3">
+                      <div className="text-[18px] leading-snug text-[var(--text-hi)] font-medium font-display">
+                        <ClickableSentence text={item.original} onWord={pickWord}/>
+                      </div>
+                      <div className="text-[13px] text-[var(--text-mid)] blur-sm hover:blur-none transition-all duration-300 cursor-help" title="Ver tradução">{item.translation}</div>
+                      <div className="pt-3 border-t border-[var(--line)]">
+                        <div className="caps-sm font-mono text-[10px] text-[var(--accent)] mb-1.5 flex items-center gap-1.5">
+                          <Icon name="bulb" size={10}/> Nota
+                        </div>
+                        <div className="text-[12.5px] text-[var(--text-mid)] leading-relaxed">{item.notes}</div>
+                      </div>
+                    </div>
+                    <button onClick={() => audio.playAudio(item.original, `tx-${idx}`)}
+                      className="chip-btn ghost flex-shrink-0">
+                      {audio.loadingId === `tx-${idx}` ? <Spinner size={12}/> : <Icon name="volume" size={12}/>}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <SectionHead
+              eyebrow="04.2 · Mineração"
+              title="Cartões prontos para o deck"
+              right={<button onClick={handleAddAllAnki} className="btn-primary"><Icon name="layers" size={12}/> Adicionar todos</button>}
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {textResult.ankiCards.map((c, idx) => (
+                <div key={idx} className="surface-2 p-5">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="caps-sm font-mono text-[10px] text-[var(--text-dim)]">Cartão {idx + 1}</div>
+                    <button onClick={() => addToDeck(c)} className="chip-btn ghost"><Icon name="plus" size={10}/></button>
+                  </div>
+                  <div className="text-[15px] text-[var(--text-hi)] font-medium mb-2 font-display">"{c.front}"</div>
+                  <div className="text-[12.5px] text-[var(--text-mid)]">{c.back}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================
+// NOVO: TUTOR IA (COMBINA CHAT E PROFESSOR)
+// ============================================
+const TutorScreen = ({
+  chatMessages, setChatMessages,
+  teacherMessages, setTeacherMessages,
+  chatLevel, setChatLevel
+}) => {
+  const [mode, setMode] = useState('chat'); // 'chat' | 'teacher'
+  
+  // Shared input state
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  // Chat specific states
+  const [suggestions, setSuggestions] = useState([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
+  const [correctionResult, setCorrectionResult] = useState(null);
+  const [isCorrecting, setIsCorrecting] = useState(false);
+
+  const startChat = () => {
+    setChatMessages([{ sender: 'AI', text: "Hello! Ready to practice some English today?", translation: "Olá! Pronto para praticar um pouco de inglês hoje?" }]);
+  };
+
+  const analyzeInput = async () => {
+    if (!input.trim() || mode !== 'chat') return;
+    setIsCorrecting(true);
+    setCorrectionResult(null);
+
+    try {
+      const prompt = `Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
+Analise a seguinte frase que o aluno escreveu (nível ${chatLevel}): "${input}".
+Corrija possíveis erros gramaticais, de ortografia ou de fluência, tornando a frase natural para o nível escolhido.
+Retorne APENAS um objeto JSON com as seguintes propriedades:
+- "correctedText": a frase corrigida em inglês (ou a original se já estiver perfeita).
+- "explanation": uma breve e encorajadora explicação em PT-BR sobre o que foi alterado e porquê (ou um elogio curto se estiver perfeita).`;
+
+      const result = await askGemini(prompt, {
+        type: "OBJECT",
+        properties: {
+          correctedText: { type: "STRING" },
+          explanation: { type: "STRING" }
+        },
+        required: ["correctedText", "explanation"]
+      });
+      setCorrectionResult(result);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsCorrecting(false);
+    }
+  };
+
+  const sendChat = async () => {
+    if (!input.trim()) return;
+    const userMsg = input.trim();
+    
+    const currentHistory = [...chatMessages, { sender: 'USER', text: userMsg }];
+    setChatMessages(currentHistory);
+    setInput('');
+    setLoading(true);
+    setSuggestions([]);
+    setCorrectionResult(null);
+
+    try {
+      const historyText = currentHistory.map(m => `${m.sender === 'USER' ? 'Usuário' : 'Amigo'}: ${m.text}`).join('\n');
+      const prompt = `Você é um professor de inglês experiente ajudando um estudante brasileiro adulto. Para este exercício prático, você assumirá o papel de melhor amigo do usuário e vocês estão conversando de forma casual. O usuário está praticando inglês e o nível escolhido é ${chatLevel}.
+Seu objetivo é continuar a conversa de forma natural, amigável e descontraída, como um melhor amigo de verdade.
+RESPONDA SEMPRE EM INGLÊS usando vocabulário e gramática estritamente adequados ao nível ${chatLevel}.
+
+Histórico da conversa:
+${historyText}
+
+Gere a sua resposta estruturada em JSON com os seguintes campos:
+- "text": A sua resposta natural e de amigo em inglês (nível ${chatLevel}).
+- "translation": A tradução da sua resposta para Português do Brasil (PT-BR).
+- "feedback": Um breve e encorajador feedback em PT-BR sobre o inglês usado na última mensagem do usuário (elogiando, dando uma dica ou corrigindo pequenos erros de forma muito amigável e madura).`;
+
+      const result = await askGemini(prompt, {
+        type: "OBJECT",
+        properties: {
+          text: { type: "STRING" },
+          translation: { type: "STRING" },
+          feedback: { type: "STRING" }
+        },
+        required: ["text", "translation", "feedback"]
+      });
+
+      setChatMessages(prev => {
+        const arr = [...prev];
+        for (let i = arr.length - 1; i >= 0; i--) {
+          if (arr[i].sender === 'USER') {
+            arr[i] = { ...arr[i], feedback: result.feedback };
+            break;
+          }
+        }
+        arr.push({ sender: 'AI', text: result.text, translation: result.translation });
+        return arr;
+      });
+    } catch (err) {
+      console.error(err);
+      setChatMessages(prev => [...prev, { sender: 'AI', text: "Sorry, I'm having trouble connecting right now!", translation: "Desculpe, estou com problemas de conexão agora!" }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const suggestReplies = async () => {
+    if (chatMessages.length === 0) return;
+    setIsSuggesting(true);
+    setSuggestions([]);
+    
+    try {
+      const historyText = chatMessages.map(m => `${m.sender === 'USER' ? 'Usuário' : 'Amigo'}: ${m.text}`).join('\n');
+      const prompt = `Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
+Baseado no histórico desta conversa casual (nível de inglês ${chatLevel}), sugira 3 opções curtas, naturais e informais de respostas em inglês que o Usuário poderia enviar agora.
+Retorne APENAS um array JSON estrito contendo exatamente 3 strings. Exemplo: ["I agree!", "What about you?", "That's cool."].
+
+Histórico da conversa:
+${historyText}`;
+
+      const result = await askGemini(prompt, { type: "ARRAY", items: { type: "STRING" } });
+      setSuggestions(result);
+    } catch (err) {
+      console.error(err);
+      setSuggestions(["I agree", "What about you?", "That's cool!"]); 
+    } finally {
+      setIsSuggesting(false);
+    }
+  };
+
+  const sendTeacher = async () => {
+    if (!input.trim()) return;
+    const q = input.trim();
+    
+    const currentHistory = [...teacherMessages, { sender: 'USER', text: q }];
+    setTeacherMessages(currentHistory);
+    setInput('');
+    setLoading(true);
+
+    try {
+      const historyText = currentHistory.map(m => `${m.sender === 'USER' ? 'Aluno' : 'Professor'}: ${m.text}`).join('\n');
+      const prompt = `Você é um professor de inglês experiente, amigável e muito didático ajudando um estudante brasileiro adulto.
+O seu objetivo é esclarecer as dúvidas de inglês do aluno de forma muito clara, madura e com exemplos práticos, naturais e curtos.
+Não utilize formatação Markdown (evite o uso de asteriscos **). Use apenas aspas simples ou duplas para destacar palavras.
+Responda sempre de forma conversacional e em Português do Brasil (PT-BR), a menos que esteja dando exemplos de frases em inglês.
+
+Histórico da conversa:
+${historyText}
+Professor:`;
+
+      const resultText = await askGemini(prompt);
+      setTeacherMessages(prev => [...prev, { sender: 'AI', text: resultText.replace(/^Professor:\s*/i, '').trim() }]);
+    } catch (err) {
+      console.error(err);
+      setTeacherMessages(prev => [...prev, { sender: 'AI', text: "Ocorreu um problema na ligação ao servidor. Por favor, aguarda uns instantes e tenta novamente." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = () => mode === 'chat' ? sendChat() : sendTeacher();
+
+  // Render variables
+  const isChat = mode === 'chat';
+  const messages = isChat ? chatMessages : teacherMessages;
+  const isChatEmpty = chatMessages.length === 0;
+  const isTeacherEmpty = teacherMessages.length === 0;
+
+  return (
+    <div className="animate-fadeSlide">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+        <div>
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">05 · Tutor IA</div>
+          <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight">
+            {isChat ? (
+              <>Conversa <span className="font-display italic text-[var(--accent)]">real</span> com feedback.</>
+            ) : (
+              <>Pergunte <span className="font-display italic text-[var(--accent)]">qualquer coisa</span>.</>
+            )}
+          </h1>
+        </div>
+        <div className="inline-flex border border-[var(--line)] bg-[var(--bg-1)] p-1 rounded-sm gap-1 self-start sm:self-auto">
+          <button onClick={() => setMode('chat')} className={`chip-btn ghost border-0 !py-2 !px-4 ${isChat ? 'active' : ''}`}>
+            <Icon name="chat" size={12}/> Conversar
+          </button>
+          <button onClick={() => setMode('teacher')} className={`chip-btn ghost border-0 !py-2 !px-4 ${!isChat ? 'active' : ''}`}>
+            <Icon name="brain" size={12}/> Dúvidas
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+        {/* Main Interface */}
+        <div className="surface flex flex-col h-[600px] relative">
+          <div className="flex items-center justify-between px-5 py-3 hl-b">
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 flex items-center justify-center font-mono font-bold text-[13px] ${isChat ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "border border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"}`}>
+                {isChat ? 'A' : <Icon name="brain" size={16}/>}
+              </div>
+              <div>
+                <div className="text-[13px] font-semibold text-[var(--text-hi)]">{isChat ? `Alex · ${chatLevel}` : 'Prof. Gemini'}</div>
+                <div className="text-[11px] font-mono text-[var(--text-lo)] flex items-center gap-1.5">
+                  {isChat ? <><span className="w-1.5 h-1.5 bg-[var(--accent)] pulse-dot"/> online</> : "especialista em inglês prático"}
+                </div>
+              </div>
+            </div>
+            {isChat && (
+              <div className="flex items-center gap-2">
+                <Tag mono={false}>CEFR {chatLevel}</Tag>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 flex flex-col relative">
+            {isChat && isChatEmpty && !loading && (
+              <div className="flex-1 flex flex-col items-center justify-center opacity-50">
+                <Icon name="chat" size={32} className="mb-3"/>
+                <p className="text-[13px] text-[var(--text-mid)] text-center max-w-[200px]">Inicie uma conversa clicando em "Nova Conversa" ou envie uma mensagem.</p>
+              </div>
+            )}
+            {!isChat && isTeacherEmpty && !loading && (
+              <div className="flex-1 flex flex-col items-center justify-center opacity-50">
+                <Icon name="brain" size={32} className="mb-3"/>
+                <p className="text-[13px] text-[var(--text-mid)] text-center max-w-[240px]">Tem dúvidas sobre inglês? O professor de IA está pronto para ajudar.</p>
+              </div>
+            )}
+
+            {messages.map((m, i) => (
+              <div key={i} className={`flex gap-3 ${m.sender === 'USER' ? (isChat ? "justify-end" : "flex-row-reverse") : "justify-start"}`}>
+                {!isChat && (
+                  <div className={`w-7 h-7 flex items-center justify-center flex-shrink-0 font-mono text-[11px] font-bold ${
+                    m.sender === 'USER' ? "bg-[var(--bg-2)] text-[var(--text-hi)]" : "bg-[var(--accent)] text-[var(--accent-ink)]"
+                  }`}>
+                    {m.sender === 'USER' ? 'V' : 'P'}
+                  </div>
+                )}
+                <div className={`max-w-[80%] ${m.sender === 'USER' ? "text-right" : ""}`}>
+                  <div className={`${isChat ? "inline-block px-4 py-3" : "p-4"} text-[14px] leading-relaxed ${
+                    m.sender === 'USER'
+                      ? (isChat ? "bg-[var(--accent)] text-[var(--accent-ink)]" : "surface-2 inline-block text-left")
+                      : (isChat ? "surface-2" : "bg-[var(--bg-2)] border border-[var(--line)]")
+                  }`}>
+                    {m.text}
+                  </div>
+                  {isChat && m.translation && (
+                    <div className="text-[11px] text-[var(--text-dim)] mt-1 font-mono blur-sm hover:blur-none transition-all duration-300 cursor-help" title="Ver tradução">
+                      {m.translation}
+                    </div>
+                  )}
+                  {isChat && m.feedback && (
+                    <div className="mt-2 p-3 border border-[var(--accent-border)] bg-[var(--accent-soft)] text-left max-w-[90%]">
+                      <div className="caps-sm font-mono text-[10px] text-[var(--accent)] mb-1 flex items-center gap-1">
+                        <Icon name="bulb" size={10}/> Feedback do professor
+                      </div>
+                      <div className="text-[12.5px] text-[var(--text-mid)]">{m.feedback}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {loading && (
+              <div className="flex gap-1 p-2">
+                <span className="w-1.5 h-1.5 bg-[var(--text-lo)] pulse-dot" style={{animationDelay:'0s'}}/>
+                <span className="w-1.5 h-1.5 bg-[var(--text-lo)] pulse-dot" style={{animationDelay:'.2s'}}/>
+                <span className="w-1.5 h-1.5 bg-[var(--text-lo)] pulse-dot" style={{animationDelay:'.4s'}}/>
+              </div>
+            )}
+          </div>
+
+          {/* Correct Modal for Chat */}
+          {isChat && correctionResult && (
+            <div className="absolute bottom-[60px] left-0 right-0 z-10 px-3">
+              <div className="p-4 border border-[var(--accent-border)] bg-[var(--bg-1)] shadow-xl relative animate-fadeSlide">
+                <button onClick={() => setCorrectionResult(null)} className="absolute top-3 right-3 text-[var(--text-lo)] hover:text-[var(--text-hi)]"><Icon name="x" size={14}/></button>
+                <div className="caps-sm font-mono text-[10px] text-[var(--accent)] mb-2 flex items-center gap-1.5">
+                  <Icon name="sparkles" size={12}/> Sugestão do Professor
+                </div>
+                <div className="text-[15px] text-[var(--text-hi)] font-medium mb-1">{correctionResult.correctedText}</div>
+                <div className="text-[12.5px] text-[var(--text-mid)] mb-4">{correctionResult.explanation}</div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setInput(correctionResult.correctedText); setCorrectionResult(null); }} className="btn-primary flex-1 justify-center py-2 text-[12px]">
+                    <Icon name="check" size={12}/> Aplicar correção
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Suggestions for Chat */}
+          {isChat && suggestions && suggestions.length > 0 && !isSuggesting && (
+            <div className="px-5 py-3 hl-t flex flex-wrap gap-2">
+              {suggestions.map((s, i) => (
+                <button key={i} onClick={() => setInput(s)} className="tag hover:border-[var(--accent-border)] hover:text-[var(--accent)]">
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="p-3 hl-t flex gap-2 relative z-20 bg-[var(--bg-1)]">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={isChat ? "Escreva uma resposta…" : "Faça uma pergunta…"}
+              className="input py-3 font-mono text-[13px]"
+              onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            />
+            {isChat && (
+              <>
+                <button onClick={analyzeInput} disabled={isCorrecting || !input.trim()} className="btn-ghost flex-shrink-0" title="Analisar e corrigir frase">
+                  {isCorrecting ? <Spinner size={14}/> : <Icon name="eye" size={14}/>}
+                </button>
+                <button onClick={suggestReplies} disabled={isSuggesting || chatMessages.length === 0} className="btn-ghost flex-shrink-0" title="Sugerir respostas">
+                  {isSuggesting ? <Spinner size={14}/> : <Icon name="bulb" size={14}/>}
+                </button>
+              </>
+            )}
+            <button onClick={handleSubmit} className="btn-primary flex-shrink-0">
+              <Icon name="send" size={14}/>
+            </button>
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-3">
+          {isChat ? (
+            <>
+              <div className="surface p-4">
+                <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-3 flex justify-between items-center">
+                  Esta sessão
+                  {chatMessages.length === 0 && <button onClick={startChat} className="text-[var(--accent)] hover:underline">Nova</button>}
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[12px] text-[var(--text-mid)] mb-1 block">Nível de Conversa</label>
+                    <select value={chatLevel} onChange={(e) => setChatLevel(e.target.value)} className="input !py-1.5 !px-2 text-[12px] font-mono w-full">
+                      {['A1','A2','B1','B2','C1','C2'].map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex justify-between text-[13px] pt-2 hl-t"><span className="text-[var(--text-mid)]">Mensagens</span><span className="tnum font-mono text-[var(--text-hi)]">{chatMessages.length}</span></div>
+                  <div className="flex justify-between text-[13px]"><span className="text-[var(--text-mid)]">As suas palavras</span><span className="tnum font-mono text-[var(--text-hi)]">{chatMessages.filter(m => m.sender === 'USER').reduce((a,m) => a + m.text.split(/\s+/).length, 0)}</span></div>
+                </div>
+              </div>
+              <div className="surface p-4">
+                <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-3">Dica</div>
+                <div className="text-[12.5px] text-[var(--text-mid)] leading-relaxed">
+                  Use o ícone de <Icon name="eye" size={10} className="inline"/> para analisar e corrigir a sua frase antes de enviar!
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="surface p-4">
+              <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-3">Temas rápidos</div>
+              <div className="space-y-1">
+                {[
+                  "Diferença entre 'make' e 'do'",
+                  "Quando usar 'present perfect'?",
+                  "Phrasal verbs mais comuns",
+                  "Pronúncia do 'th'",
+                  "Artigos: a, an, the",
+                ].map((q, i) => (
+                  <button key={i} onClick={() => setInput(q)}
+                    className="w-full text-left text-[12.5px] text-[var(--text-mid)] hover:text-[var(--text-hi)] p-2 hover:bg-[var(--bg-2)] transition-colors">
+                    → {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const FillInScreen = ({ addToDeck }) => {
+  const [fillWords, setFillWords] = useState('');
+  const [fillLevel, setFillLevel] = useState('B1');
+  const [fillMode, setFillMode] = useState('typing');
+  const [fillExercises, setFillExercises] = useState([]);
+  const [fillLoading, setFillLoading] = useState(false);
+  const [fillIdx, setFillIdx] = useState(0);
+  const [fillUserInput, setFillUserInput] = useState('');
+  const [fillRevealed, setFillRevealed] = useState(false);
+  const [fillResults, setFillResults] = useState([]);
+  const [fillShowHint, setFillShowHint] = useState(false);
+  const [isSummary, setIsSummary] = useState(false);
+
+  const generateFill = async () => {
+    if (!fillWords.trim()) return;
+    setFillLoading(true);
+
+    const wordsArray = fillWords.split(/[,;\n]+/).map(w => w.trim()).filter(Boolean);
+
+    try {
+      const prompt = `Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
+Cria EXATAMENTE 10 exercícios de preencher os espaços em branco (fill-in-the-blank) em inglês, utilizando as seguintes palavras como respostas: ${wordsArray.join(', ')}.
+O nível de inglês (CEFR) deve ser ${fillLevel}.
+Se a lista tiver menos de 10 palavras, repete as palavras com frases diferentes para perfazer exatamente 10 exercícios.
+A palavra em falta na frase deve ser substituída por "___".
+Retorna um array de objetos JSON com exatamente 10 elementos. Cada objeto deve conter:
+- sentence: A frase em inglês com "___".
+- answer: A palavra correta.
+- translation: A tradução da frase completa para Português do Brasil (PT-BR).
+- hint: Uma pequena dica em PT-BR sem revelar a resposta.
+- options: Um array com 4 opções (a resposta certa e 3 distratores plausíveis em inglês).`;
+
+      const result = await askGemini(prompt, {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            sentence: { type: "STRING" },
+            answer: { type: "STRING" },
+            translation: { type: "STRING" },
+            hint: { type: "STRING" },
+            options: { type: "ARRAY", items: { type: "STRING" } }
+          },
+          required: ["sentence", "answer", "translation", "hint", "options"]
+        }
+      });
+
+      const newExercises = result.map((item, index) => ({
+        id: 'f' + Date.now() + index,
+        sentence: item.sentence,
+        answer: item.answer,
+        translation: item.translation,
+        hint: item.hint,
+        options: item.options.sort(() => 0.5 - Math.random()),
+        difficulty: fillLevel.includes('A') ? 'easy' : fillLevel.includes('B') ? 'medium' : 'hard',
+      }));
+
+      setFillExercises(newExercises);
+      setFillIdx(0);
+      setFillUserInput('');
+      setFillRevealed(false);
+      setFillResults([]);
+      setFillShowHint(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setFillLoading(false);
+    }
+  };
+
+  const revealFill = () => {
+    const ex = fillExercises[fillIdx];
+    if (!ex) return;
+    const correct = fillUserInput.trim().toLowerCase() === ex.answer.toLowerCase();
+    setFillResults(prev => {
+      const next = [...prev];
+      next[fillIdx] = { correct, answer: fillUserInput };
+      return next;
+    });
+    setFillRevealed(true);
+  };
+  const nextFill = () => {
+    setFillIdx(i => i + 1);
+    setFillUserInput('');
+    setFillRevealed(false);
+    setFillShowHint(false);
+  };
+  const resetFill = () => {
+    setFillExercises([]);
+    setFillIdx(0);
+    setFillUserInput('');
+    setFillRevealed(false);
+    setFillResults([]);
+    setFillShowHint(false);
+    setIsSummary(false);
+  };
+
+  const ex = fillExercises[fillIdx];
+  const total = fillExercises.length;
+  const done = fillResults.length;
+  const correct = fillResults.filter(r => r.correct).length;
+
+  if (!ex) {
+    return (
+      <div className="animate-fadeSlide space-y-10">
+        <div>
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">06 · Fill-in</div>
+          <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight max-w-[26ch] text-[var(--text-mid)]">
+            Complete a <span className="font-display italic">frase</span> com a palavra certa.
+          </h1>
+          <p className="text-[var(--text-mid)] text-[14px] mt-3 max-w-[52ch]">
+            Envie as palavras que pretende treinar. A IA cria frases naturais com lacunas — o utilizador escreve ou escolhe entre alternativas.
+          </p>
+        </div>
+
+        <div className="surface p-5 sm:p-6 space-y-4">
+          <div>
+            <label className="caps-sm font-mono text-[10.5px] text-[var(--text-lo)] mb-2 block">Palavras a treinar</label>
+            <textarea
+              value={fillWords}
+              onChange={(e) => setFillWords(e.target.value)}
+              placeholder="travel, airport, ticket, book, reserve"
+              rows={3}
+              className="input font-mono text-[13px] resize-none leading-relaxed"
+            />
+            <div className="flex flex-wrap gap-2 mt-3">
+              <span className="caps-sm font-mono text-[10.5px] text-[var(--text-dim)] mr-1 self-center">Sugestões:</span>
+              {['business meeting', 'ordering food', 'job interview', 'small talk', 'feelings'].map(t => (
+                <button key={t} onClick={() => setFillWords(t.split(' ').join(', '))} className="tag hover:border-[var(--line-strong)] hover:text-[var(--text-hi)]">{t}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 hl-t">
+            <div>
+              <label className="caps-sm font-mono text-[10.5px] text-[var(--text-lo)] mb-2 block">Nível</label>
+              <div className="flex flex-wrap gap-1">
+                {['A1','A2','B1','B2','C1','C2'].map(l => (
+                  <button key={l} onClick={() => setFillLevel(l)}
+                    className={`chip-btn ghost text-[11px] py-2 px-3 ${fillLevel === l ? "active" : ""}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="caps-sm font-mono text-[10.5px] text-[var(--text-lo)] mb-2 block">Modo</label>
+              <div className="flex gap-1">
+                <button onClick={() => setFillMode('typing')}
+                  className={`chip-btn ghost flex-1 justify-center ${fillMode === 'typing' ? "active" : ""}`}>
+                  <Icon name="kbd" size={12}/> Digitar
+                </button>
+                <button onClick={() => setFillMode('multiple')}
+                  className={`chip-btn ghost flex-1 justify-center ${fillMode === 'multiple' ? "active" : ""}`}>
+                  <Icon name="check" size={12}/> Múltipla
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 hl-t">
+            <button onClick={generateFill} disabled={fillLoading || !fillWords.trim()} className="btn-primary w-full justify-center py-4">
+              {fillLoading ? <><Spinner/> A gerar 10 exercícios…</> : <><Icon name="sparkles" size={14}/> Gerar {fillMode === 'typing' ? '10 frases' : '10 frases com opções'}</>}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { n: '01', t: 'Envie palavras', d: 'Vocabulário que quer treinar agora' },
+            { n: '02', t: 'IA cria frases', d: 'Contextualizadas no seu nível CEFR' },
+            { n: '03', t: 'Complete & acerte', d: 'A digitar ou a escolher entre opções' },
+          ].map(s => (
+            <div key={s.n} className="surface p-4">
+              <div className="font-mono text-[11px] text-[var(--text-dim)] tnum mb-2">{s.n}</div>
+              <div className="text-[14px] font-semibold text-[var(--text-hi)] mb-1">{s.t}</div>
+              <div className="text-[12px] text-[var(--text-mid)]">{s.d}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const input = fillUserInput || '';
+  const isCorrect = input.trim().toLowerCase() === ex.answer.toLowerCase();
+  const parts = ex.sentence.split('___');
+  const progress = ((fillIdx) / total) * 100;
+
+  if (isSummary) {
+    return (
+      <div className="animate-fadeSlide max-w-[600px] mx-auto mt-10">
+        <div className="surface p-12 flex flex-col items-center text-center">
+          <div className="w-16 h-16 bg-[var(--accent)] text-[var(--accent-ink)] flex items-center justify-center rounded-full mb-6">
+            <Icon name="trophy" size={32}/>
+          </div>
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">Sessão concluída</div>
+          <h2 className="text-[32px] font-display font-semibold text-[var(--text-hi)] mb-2">O seu Resultado</h2>
+          <p className="text-[16px] text-[var(--text-mid)] mb-8">
+            Acertou <strong className="text-[var(--text-hi)]">{correct}</strong> de <strong className="text-[var(--text-hi)]">{total}</strong> questões ({Math.round((correct/total)*100)}%).
+          </p>
+
+          <div className="flex gap-1 w-full max-w-sm mb-10">
+            {fillResults.map((r, i) => (
+              <div key={i} className={`flex-1 h-2 rounded-full ${r.correct ? "bg-[var(--accent)]" : "bg-[var(--danger)]"}`}/>
+            ))}
+          </div>
+
+          <button onClick={resetFill} className="btn-primary py-4 px-8 justify-center w-full sm:w-auto">
+            <Icon name="rotate" size={14}/> Praticar Novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="animate-fadeSlide max-w-[760px] mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+        <div>
+          <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">06 · Fill-in</div>
+          <h1 className="caps-lg text-[28px] font-semibold leading-[1.05] tracking-tight">Complete as frases</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Tag>{fillLevel}</Tag>
+          <Tag accent><Icon name="check" size={10}/> {correct}/{total}</Tag>
+          <button onClick={resetFill} className="chip-btn ghost" title="Reiniciar">
+            <Icon name="rotate" size={12}/>
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-5">
+        <div className="flex justify-between text-[11px] font-mono caps-sm text-[var(--text-lo)] mb-2">
+          <span>Exercício {fillIdx + 1} de {total}</span>
+          <span className="tnum">{Math.round(progress)}%</span>
+        </div>
+        <div className="seg">
+          {fillExercises.map((_, i) => {
+            const r = fillResults[i];
+            let cls = '';
+            if (r) cls = r.correct ? 'on' : '';
+            if (i === fillIdx && !r) cls = 'on';
+            return <span key={i} className={cls} style={r && !r.correct ? { background: 'var(--danger)' } : {}}/>;
+          })}
+        </div>
+      </div>
+
+      <div className="surface-2 p-8 sm:p-10">
+        <div className="flex items-start justify-between mb-6">
+          <div className="caps-sm font-mono text-[10.5px] text-[var(--text-dim)]">Frase {fillIdx + 1}</div>
+          <Tag>{ex.difficulty}</Tag>
+        </div>
+
+        <div className="text-[28px] sm:text-[32px] font-display leading-[1.3] text-[var(--text-hi)] mb-2" style={{textWrap:"balance"}}>
+          {parts[0]}
+          {fillRevealed ? (
+            <span className={`inline-flex items-baseline px-3 py-1 mx-1 font-semibold ${
+              isCorrect
+                ? "bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent-border)]"
+                : "bg-[rgba(248,113,113,0.08)] text-[var(--danger)] border border-[rgba(248,113,113,0.3)]"
+            }`}>
+              {input || '—'}
+            </span>
+          ) : (
+            fillMode === 'typing' ? (
+              <input
+                autoFocus
+                value={input}
+                onChange={(e) => setFillUserInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && input.trim() && revealFill()}
+                placeholder="…"
+                className="inline-block bg-[var(--bg-0)] border-b-2 border-[var(--accent)] outline-none font-display font-semibold text-[var(--text-hi)] mx-2 px-2 py-1 min-w-[140px] text-center"
+                style={{ width: `${Math.max(140, (input.length || 4) * 16)}px` }}
+              />
+            ) : (
+              <span className="inline-block border-b-2 border-dashed border-[var(--text-dim)] min-w-[140px] mx-2 text-[var(--text-dim)] text-center px-2">
+                ______
+              </span>
+            )
+          )}
+          {parts[1]}
+        </div>
+
+        <div className="text-[13px] text-[var(--text-mid)] italic">{ex.translation}</div>
+
+        {fillMode === 'multiple' && !fillRevealed && (
+          <div className="grid grid-cols-2 gap-2 mt-8">
+            {ex.options.map((opt, i) => (
+              <button
+                key={i}
+                onClick={() => setFillUserInput(opt)}
+                className={`surface p-4 text-left transition-colors ${
+                  input === opt
+                    ? "border-[var(--accent)] bg-[var(--accent-soft)]"
+                    : "hover:border-[var(--line-strong)]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`w-6 h-6 border flex items-center justify-center font-mono text-[11px] ${
+                    input === opt ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--accent-ink)]" : "border-[var(--line-strong)] text-[var(--text-lo)]"
+                  }`}>
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  <span className={`text-[15px] ${input === opt ? "text-[var(--text-hi)] font-semibold" : "text-[var(--text-mid)]"}`}>{opt}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!fillRevealed && (
+          <div className="flex items-center gap-3 mt-6 pt-6 hl-t">
+            <button onClick={() => setFillShowHint(s => !s)} className="chip-btn ghost">
+              <Icon name="bulb" size={12}/> {fillShowHint ? "Ocultar dica" : "Ver dica"}
+            </button>
+            {fillShowHint && (
+              <span className="text-[12px] text-[var(--text-mid)] italic">{ex.hint}</span>
+            )}
+          </div>
+        )}
+
+        {fillRevealed && (
+          <div className="mt-6 pt-6 hl-t space-y-4 animate-fadeSlide">
+            <div className={`p-4 border ${
+              isCorrect
+                ? "border-[var(--accent-border)] bg-[var(--accent-soft)]"
+                : "border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.05)]"
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={isCorrect ? "text-[var(--accent)]" : "text-[var(--danger)]"}>
+                  <Icon name={isCorrect ? "check2" : "x"} size={18}/>
+                </div>
+                <div className="flex-1">
+                  <div className={`text-[14px] font-semibold mb-1 ${isCorrect ? "text-[var(--accent)]" : "text-[var(--danger)]"}`}>
+                    {isCorrect ? "Correto!" : "Não é essa."}
+                  </div>
+                  {!isCorrect && (
+                    <div className="text-[13px] text-[var(--text-mid)]">
+                      Resposta correta: <span className="font-semibold text-[var(--text-hi)] font-mono">{ex.answer}</span>
+                    </div>
+                  )}
+                  <div className="text-[12px] text-[var(--text-mid)] mt-2 italic">{ex.hint}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-5 flex gap-2">
+        {!fillRevealed ? (
+          <button
+            onClick={revealFill}
+            disabled={!input.trim()}
+            className="btn-primary flex-1 justify-center py-4"
+          >
+            Verificar resposta <Icon name="arrow" size={14}/>
+          </button>
+        ) : (
+          <>
+            <button onClick={() => addToDeck(ex)} className="btn-ghost">
+              <Icon name="plus" size={14}/> Guardar no deck
+            </button>
+            {fillIdx < total - 1 ? (
+              <button onClick={nextFill} className="btn-primary flex-1 justify-center py-4">
+                Próxima <Icon name="arrow" size={14}/>
+              </button>
+            ) : (
+              <button onClick={() => setIsSummary(true)} className="btn-primary flex-1 justify-center py-4">
+                <Icon name="trophy" size={14}/> Ver resultado
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+    </div>
+  );
+};
+
+const PhoneticsScreen = ({ audio }) => {
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const generatePhonetics = async () => {
+    if (!input.trim()) return;
+    setLoading(true);
+    setErrorMsg('');
+
+    try {
+      const prompt = `Você é um professor de inglês ajudando um estudante brasileiro.
+Transcreva a seguinte frase em inglês criando uma "pronúncia figurada" que usa as letras e acentos do português brasileiro para simular o som do inglês (ex: 'I love you' -> 'ai lâv iu', 'good morning' -> 'gud mórnin', 'my friend' -> 'mai frênd'). NÃO use símbolos fonéticos complexos (IPA).
+Frase: "${input.trim()}"
+
+Retorne APENAS um objeto JSON com a seguinte estrutura:
+- "original": a frase original em inglês.
+- "phonetic": a transcrição completa da frase na pronúncia figurada.
+- "translation": a tradução da frase para o Português do Brasil (PT-BR).
+- "words": um array de objetos mapeando as palavras mais difíceis ou importantes da frase (máximo de 6). Cada objeto deve ter:
+    - "word": a palavra em inglês.
+    - "phonetic": a pronúncia figurada da palavra.
+    - "tip": uma dica muito curta em PT-BR de como pronunciar o som (ex: "enrole o R", "ponha a língua entre os dentes").`;
+
+      const result = await askGemini(prompt, {
+        type: "OBJECT",
+        properties: {
+          original: { type: "STRING" },
+          phonetic: { type: "STRING" },
+          translation: { type: "STRING" },
+          words: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                word: { type: "STRING" },
+                phonetic: { type: "STRING" },
+                tip: { type: "STRING" }
+              },
+              required: ["word", "phonetic", "tip"]
+            }
+          }
+        },
+        required: ["original", "phonetic", "translation", "words"]
+      });
+      setResult(result);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Ocorreu um erro ao processar a transcrição. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="animate-fadeSlide space-y-8">
+      <div>
+        <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">07 · Fonética</div>
+        <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight">
+          Domine a <span className="font-display italic text-[var(--accent)]">pronúncia</span> exata.
+        </h1>
+        <p className="text-[var(--text-mid)] text-[14px] mt-3 max-w-[52ch]">
+          Escreva uma frase para obter a pronúncia figurada, uma forma simples de ler como se fala usando os sons e acentos do português.
+        </p>
+      </div>
+
+      <div className="surface p-5 sm:p-6">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ex: I would like a cup of coffee, please."
+          rows={3}
+          className="input font-mono text-[13px] resize-none leading-relaxed"
+        />
+        {errorMsg && (
+          <div className="mt-3 text-[13px] text-[var(--danger)] flex items-center gap-2">
+            <Icon name="alert" size={14}/> {errorMsg}
+          </div>
+        )}
+        <div className="flex justify-end mt-4">
+          <button onClick={generatePhonetics} disabled={loading || !input.trim()} className="btn-primary">
+            {loading ? <><Spinner/> A transcrever</> : <><Icon name="zap" size={14}/> Transcrever</>}
+          </button>
+        </div>
+      </div>
+
+      {result && (
+        <div className="space-y-8 animate-fadeSlide">
+          <div className="surface-2 p-6 sm:p-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+              <Icon name="zap" size={120} />
+            </div>
+            <div className="relative z-10">
+              <div className="caps-sm font-mono text-[11px] text-[var(--accent)] mb-3">Como se lê</div>
+              <div className="font-mono text-[24px] sm:text-[32px] text-[var(--accent)] leading-relaxed tracking-wide mb-4">
+                {result.phonetic}
+              </div>
+              <div className="text-[18px] text-[var(--text-hi)] font-display mb-1">{result.original}</div>
+              <div className="text-[13px] text-[var(--text-mid)] italic mb-6">{result.translation}</div>
+
+              <button onClick={() => audio.playAudio(result.original, 'phonetics-audio')} className="btn-ghost">
+                {audio.loadingId === 'phonetics-audio' ? <Spinner size={14}/> : audio.playingId === 'phonetics-audio' ? <div className="wave"><b/><b/><b/><b/><b/><b/></div> : <Icon name="volume" size={14}/>}
+                {audio.playingId === 'phonetics-audio' ? "A reproduzir..." : "Ouvir Pronúncia Original"}
+              </button>
+            </div>
+          </div>
+
+          {result.words && result.words.length > 0 && (
+            <div>
+              <SectionHead eyebrow="07.1 · Dicas" title="Foco na articulação" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {result.words.map((w, i) => (
+                  <div key={i} className="surface p-4">
+                    <div className="flex items-baseline justify-between mb-2">
+                      <span className="font-bold text-[16px] text-[var(--text-hi)]">{w.word}</span>
+                      <span className="font-mono text-[13px] text-[var(--accent)]">{w.phonetic}</span>
+                    </div>
+                    <div className="text-[13px] text-[var(--text-mid)] leading-relaxed">
+                      {w.tip}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ImmersionScreen = ({ pickWord, audio }) => {
+  const [topic, setTopic] = useState('');
+  const [level, setLevel] = useState('B1');
+  const [loading, setLoading] = useState(false);
+  const [storyData, setStoryData] = useState(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [revealedPars, setRevealedPars] = useState({});
+  const [quizAnswers, setQuizAnswers] = useState({});
+  const [showResults, setShowResults] = useState(false);
+
+  const generateStory = async () => {
+    const finalTopic = topic.trim() || 'uma história aleatória e interessante do dia a dia';
+    setLoading(true);
+    setErrorMsg('');
+    
+    try {
+      const prompt = `Você é um especialista em aquisição de linguagem natural usando o método Comprehensible Input de Stephen Krashen.
+Sua tarefa é criar uma pequena história (máx 150 palavras) focada no nível CEFR ${level}. O tema é: "${finalTopic}".
+A história deve ser altamente envolvente, coerente e usar rigidamente o vocabulário e a estrutura gramatical do nível ${level}.
+
+Retorne APENAS um objeto JSON válido com a seguinte estrutura estrita:
+{
+  "title": "Título em inglês",
+  "paragraphs": [
+    {
+      "en": "Texto do parágrafo em inglês.",
+      "pt": "Tradução fiel do parágrafo para o Português do Brasil."
+    }
+  ],
+  "quiz": [
+    {
+      "question": "Pergunta simples de compreensão em inglês sobre a história",
+      "options": ["Opção 1", "Opção 2", "Opção 3"],
+      "answer": "O texto exato da Opção correta"
+    }
+  ]
+}
+O array 'paragraphs' deve conter de 2 a 4 parágrafos. O array 'quiz' deve conter EXATAMENTE 3 perguntas de interpretação de texto.`;
+
+      const result = await askGemini(prompt, {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING" },
+          paragraphs: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                en: { type: "STRING" },
+                pt: { type: "STRING" }
+              },
+              required: ["en", "pt"]
+            }
+          },
+          quiz: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                question: { type: "STRING" },
+                options: { type: "ARRAY", items: { type: "STRING" } },
+                answer: { type: "STRING" }
+              },
+              required: ["question", "options", "answer"]
+            }
+          }
+        },
+        required: ["title", "paragraphs", "quiz"]
+      });
+
+      setStoryData(result);
+      setRevealedPars({});
+      setQuizAnswers({});
+      setShowResults(false);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg("Ocorreu um erro ao tentar gerar o texto imersivo. Tente novamente.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleReveal = (idx) => {
+    setRevealedPars(prev => ({ ...prev, [idx]: !prev[idx] }));
+  };
+
+  const selectAnswer = (qIdx, opt) => {
+    if (showResults) return;
+    setQuizAnswers(prev => ({ ...prev, [qIdx]: opt }));
+  };
+
+  return (
+    <div className="animate-fadeSlide space-y-8">
+      <div>
+        <div className="caps-sm font-mono text-[11px] text-[var(--text-lo)] mb-2">08 · Imersão (Input Compreensível)</div>
+        <h1 className="caps-lg text-[38px] font-semibold leading-[1.05] tracking-tight max-w-[28ch]">
+          Adquira fluência lendo <span className="font-display italic text-[var(--accent)]">histórias</span> no seu nível.
+        </h1>
+        <p className="text-[var(--text-mid)] text-[14px] mt-3 max-w-[52ch]">
+          Aprenda pelo contexto. A IA gera um texto envolvente perfeitamente calibrado para que você entenda a maior parte e deduza o resto.
+        </p>
+      </div>
+
+      {!storyData ? (
+        <div className="surface p-5 sm:p-6 animate-fadeSlide">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4">
+            <div>
+              <label className="caps-sm font-mono text-[10.5px] text-[var(--text-lo)] mb-2 block">O que você quer ler hoje?</label>
+              <input
+                className="input font-mono text-[13px]"
+                placeholder="Um mistério de detetive, Um dia de trabalho, etc (opcional)"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && generateStory()}
+              />
+            </div>
+            <div>
+              <label className="caps-sm font-mono text-[10.5px] text-[var(--text-lo)] mb-2 block">Seu Nível CEFR</label>
+              <select 
+                value={level} 
+                onChange={(e) => setLevel(e.target.value)}
+                className="input font-mono text-[13px] py-3 cursor-pointer w-full sm:w-[120px]"
+              >
+                {['A1','A2','B1','B2','C1','C2'].map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+          
+          {errorMsg && (
+            <div className="mt-4 text-[13px] text-[var(--danger)] flex items-center gap-2">
+                <Icon name="alert" size={14}/> {errorMsg}
+            </div>
+          )}
+
+          <div className="pt-5 mt-5 hl-t flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+              <span className="caps-sm font-mono text-[10.5px] text-[var(--text-dim)] mr-1 self-center">Exemplos:</span>
+              {['Ficção Científica', 'Viagem', 'Rotina Diária'].map(t => (
+                <button key={t} onClick={() => setTopic(t)} className="tag hover:border-[var(--line-strong)] hover:text-[var(--text-hi)]">{t}</button>
+              ))}
+            </div>
+            <button onClick={generateStory} disabled={loading} className="btn-primary w-full sm:w-auto justify-center">
+              {loading ? <><Spinner/> A escrever história…</> : <><Icon name="book" size={14}/> Começar Imersão</>}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-10 animate-fadeSlide">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setStoryData(null)} className="chip-btn ghost">
+              <Icon name="arrow" size={12} className="rotate-180" /> Nova História
+            </button>
+            <div className="flex items-center gap-2">
+              <Tag mono={false}><Icon name="book" size={12}/> Imersão</Tag>
+              <Tag>{level}</Tag>
+            </div>
+          </div>
+
+          <div className="surface-2 p-6 sm:p-10 relative">
+            <h2 className="font-display text-[28px] sm:text-[36px] font-semibold text-[var(--text-hi)] mb-8 leading-tight tracking-tight">
+              {storyData.title}
+            </h2>
+
+            <div className="space-y-8">
+              {storyData.paragraphs.map((p, i) => (
+                <div key={i} className="group relative">
+                  <div className="text-[18px] sm:text-[20px] text-[var(--text-hi)] leading-relaxed font-medium" style={{ textWrap: "pretty" }}>
+                    <ClickableSentence text={p.en} onWord={pickWord} />
+                  </div>
+                  
+                  {revealedPars[i] && (
+                    <div className="mt-3 text-[14.5px] text-[var(--text-mid)] italic border-l-2 border-[var(--accent)] pl-4 animate-fadeSlide">
+                      {p.pt}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex items-center gap-3 opacity-10 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => audio.playAudio(p.en, `imm-p-${i}`)}
+                      className="chip-btn ghost text-[10px] !py-1.5 !px-2"
+                    >
+                      {audio.loadingId === `imm-p-${i}` ? <Spinner size={12}/> : <Icon name="volume" size={12}/>}
+                      {audio.playingId === `imm-p-${i}` ? 'A ler...' : 'Ouvir parágrafo'}
+                    </button>
+                    <button 
+                      onClick={() => toggleReveal(i)}
+                      className="chip-btn ghost text-[10px] !py-1.5 !px-2"
+                    >
+                      <Icon name="eye" size={12}/> {revealedPars[i] ? 'Esconder tradução' : 'Revelar tradução'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="surface p-6 sm:p-8">
+            <SectionHead 
+              eyebrow="Reading Comprehension" 
+              title="Você compreendeu bem?" 
+            />
+            <div className="space-y-6">
+              {storyData.quiz.map((q, idx) => {
+                const isAnswered = quizAnswers[idx] !== undefined;
+                const isCorrect = quizAnswers[idx] === q.answer;
+                
+                return (
+                  <div key={idx} className="space-y-3">
+                    <div className="text-[15px] font-medium text-[var(--text-hi)] flex gap-2">
+                      <span className="text-[var(--text-dim)] font-mono tnum">{idx + 1}.</span> 
+                      {q.question}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {q.options.map((opt, oIdx) => {
+                        const isSelected = quizAnswers[idx] === opt;
+                        let btnClass = "surface hover:border-[var(--line-strong)] text-left px-4 py-3 transition-colors text-[13.5px] text-[var(--text-mid)]";
+                        
+                        if (showResults) {
+                          if (opt === q.answer) btnClass = "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)] text-left px-4 py-3 font-semibold";
+                          else if (isSelected) btnClass = "border-[var(--danger)] bg-[rgba(248,113,113,0.05)] text-[var(--danger)] text-left px-4 py-3";
+                        } else if (isSelected) {
+                          btnClass = "border-[var(--line-strong)] bg-[var(--bg-2)] text-[var(--text-hi)] text-left px-4 py-3 font-medium";
+                        }
+
+                        return (
+                          <button 
+                            key={oIdx} 
+                            onClick={() => selectAnswer(idx, opt)}
+                            disabled={showResults}
+                            className={btnClass}
+                          >
+                            {opt}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {!showResults && (
+              <div className="mt-8 pt-6 hl-t flex justify-end">
+                <button 
+                  onClick={() => setShowResults(true)}
+                  disabled={Object.keys(quizAnswers).length < storyData.quiz.length}
+                  className="btn-primary"
+                >
+                  <Icon name="check" size={14}/> Corrigir Respostas
+                </button>
+              </div>
+            )}
+
+            {showResults && (
+              <div className="mt-8 pt-6 hl-t flex items-center justify-between animate-fadeSlide">
+                <div className="text-[14px] text-[var(--text-hi)]">
+                  Acertou <strong className="text-[var(--accent)] font-mono text-[16px]">{Object.values(quizAnswers).filter((ans, i) => ans === storyData.quiz[i].answer).length}</strong> de 3!
+                </div>
+                <button onClick={() => setStoryData(null)} className="btn-ghost">
+                  <Icon name="sparkles" size={14}/> Gerar outra história
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TweaksPanel = ({ tweaks, setTweak }) => {
+  const [open, setOpen] = useState(false);
+
+  const accents = [
+    { id: 'lime',    label: 'Lime (original)', color: '#ccf381', ink: '#0a0a0b' },
+    { id: 'amber',   label: 'Amber',           color: '#fbbf24', ink: '#0a0a0b' },
+    { id: 'cyan',    label: 'Cyan',            color: '#67e8f9', ink: '#0a0a0b' },
+    { id: 'magenta', label: 'Magenta',         color: '#f0abfc', ink: '#0a0a0b' },
+    { id: 'white',   label: 'Monochrome',      color: '#f5f5f4', ink: '#0a0a0b' },
+  ];
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 w-[280px] surface-2 font-sans" style={{background:'var(--bg-1)'}}>
+      <div className="flex items-center justify-between px-4 py-3 hl-b">
+        <div className="caps-sm font-mono text-[11px] text-[var(--text-hi)] flex items-center gap-2">
+          <Icon name="settings" size={12}/> Personalização
+        </div>
+        <button onClick={() => setOpen(!open)} className="text-[var(--text-lo)] hover:text-[var(--text-hi)]">
+          <Icon name={open ? "minus" : "plus"} size={12}/>
+        </button>
+      </div>
+      {open && (
+        <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div>
+            <div className="caps-sm font-mono text-[10px] text-[var(--text-lo)] mb-2">Accent</div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {accents.map(a => (
+                <button key={a.id} onClick={() => setTweak('accent', a.id)}
+                  title={a.label}
+                  className={`h-9 border ${tweaks.accent === a.id ? "border-white" : "border-[var(--line)]"}`}
+                  style={{ background: a.color }}/>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="caps-sm font-mono text-[10px] text-[var(--text-lo)] mb-2">Uppercase level</div>
+            <div className="grid grid-cols-2 gap-1">
+              {['none','labels','headings','all'].map(lv => (
+                <button key={lv} onClick={() => setTweak('uppercaseLevel', lv)}
+                  className={`chip-btn ghost text-[10px] py-2 ${tweaks.uppercaseLevel === lv ? "active" : ""}`}>
+                  {lv}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div className="caps-sm font-mono text-[10px] text-[var(--text-lo)] mb-2">Density</div>
+            <div className="grid grid-cols-3 gap-1">
+              {['compact','cozy','roomy'].map(d => (
+                <button key={d} onClick={() => setTweak('density', d)}
+                  className={`chip-btn ghost text-[10px] py-2 ${tweaks.density === d ? "active" : ""}`}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="flex items-center justify-between text-[12px] text-[var(--text-mid)] cursor-pointer">
+              <span>Streak bar</span>
+              <input type="checkbox" checked={tweaks.showStreakBar}
+                onChange={(e) => setTweak('showStreakBar', e.target.checked)}/>
+            </label>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ============================================
+// MAIN APP COMPONENT
+// ============================================
+export default function App() {
+  const [user, setUser] = useState(null);
+
+  // Authentication Effect
+  useEffect(() => {
+    if (!auth) return;
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Auth error", error);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  const [tweaks, setTweaks] = useState({
+    accent: "lime",
+    density: "cozy",
+    uppercaseLevel: "labels",
+    showStreakBar: true
+  });
+
+  const setTweak = (k, v) => setTweaks((prev) => ({ ...prev, [k]: v }));
+
+  useEffect(() => {
+    const a = ACCENT_MAP[tweaks.accent] || ACCENT_MAP.lime;
+    document.documentElement.style.setProperty('--accent', a.color);
+    document.documentElement.style.setProperty('--accent-soft', a.soft);
+    document.documentElement.style.setProperty('--accent-border', a.border);
+    document.body.setAttribute('data-density', tweaks.density || 'cozy');
+    document.body.setAttribute('data-caps', tweaks.uppercaseLevel || 'labels');
+    document.body.classList.add('grain');
+  }, [tweaks]);
+
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('bt_tab') || 'generator');
+  useEffect(() => { localStorage.setItem('bt_tab', activeTab); }, [activeTab]);
+
+  const [words, setWords] = useState('');
+  const [deck, setDeck] = useState([]);
+  const [studiedWords, setStudiedWords] = useState([]);
+  const [selectedWord, setSelectedWord] = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  // LIFTED STATES PARA O TUTOR (Preserva a conversa entre ecrãs)
+  const [chatMessages, setChatMessages] = useState([]);
+  const [teacherMessages, setTeacherMessages] = useState([]);
+  const [chatLevel, setChatLevel] = useState('B1');
+
+  // Firestore Listeners
+  useEffect(() => {
+    if (!user || !db) return;
+    
+    const deckRef = collection(db, 'artifacts', appId, 'users', user.uid, 'deck');
+    const vocabRef = collection(db, 'artifacts', appId, 'users', user.uid, 'vocabulary');
+
+    const unsubDeck = onSnapshot(deckRef, (snapshot) => {
+      const data = [];
+      snapshot.forEach(d => data.push({ id: d.id, ...d.data() }));
+      setDeck(data);
+    }, console.error);
+
+    const unsubVocab = onSnapshot(vocabRef, (snapshot) => {
+      const data = [];
+      snapshot.forEach(d => data.push({ id: d.id, ...d.data() }));
+      data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      setStudiedWords(data);
+    }, console.error);
+
+    return () => {
+      unsubDeck();
+      unsubVocab();
+    };
+  }, [user]);
+
+  const addToDeck = async (s) => {
+    if (!user) return;
+    const newId = 'c' + Date.now() + Math.random().toString(36).substring(2, 9);
+    const card = {
+      english: s.english || s.front || s.sentence,
+      portuguese: s.portuguese || s.back || s.translation,
+      nextReview: Date.now(),
+      interval: 0,
+      easeFactor: 2.5,
+      repetitions: 0,
+      createdAt: Date.now()
+    };
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'deck', newId), card);
+    } catch(e) { console.error("Error adding to deck", e); }
+  };
+
+  const updateCard = async (id, updates) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'deck', id), updates, { merge: true });
+    } catch(e) { console.error("Error updating card", e); }
+  };
+
+  const addWordToVocab = async (wordToFetch) => {
+    try {
+      const prompt = `Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
+Forneça a tradução e um exemplo de uso para a seguinte palavra ou expressão em inglês: "${wordToFetch.trim()}".
+Retorne APENAS um objeto JSON com as seguintes propriedades:
+- "word": a palavra original em inglês.
+- "translation": a tradução mais comum para Português do Brasil (PT-BR).
+- "example": uma frase curta e natural de exemplo em inglês usando a palavra.
+- "exampleTranslation": a tradução da frase de exemplo para PT-BR.`;
+
+      const parsed = await askGemini(prompt, {
+        type: "OBJECT",
+        properties: {
+          word: { type: "STRING" },
+          translation: { type: "STRING" },
+          example: { type: "STRING" },
+          exampleTranslation: { type: "STRING" }
+        },
+        required: ["word", "translation", "example", "exampleTranslation"]
+      });
+
+      parsed.createdAt = Date.now();
+      
+      if (user) {
+        const newId = 'v' + Date.now() + Math.random().toString(36).substring(2, 9);
+        await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocabulary', newId), parsed);
+        addToDeck({ english: parsed.word, portuguese: parsed.translation });
+      }
+    } catch (err) {
+      console.error(err);
+      const errObj = { word: wordToFetch.trim(), translation: "Erro de conexão", example: "", exampleTranslation: "", createdAt: Date.now() };
+      if (user) {
+         const newId = 'v' + Date.now() + Math.random().toString(36).substring(2, 9);
+         await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'vocabulary', newId), errObj);
+         addToDeck({ english: wordToFetch.trim(), portuguese: "Erro de conexão" });
+      }
+    }
+  };
+
+  const [audioPlayingId, setAudioPlayingId] = useState(null);
+  const [audioLoadingId, setAudioLoadingId] = useState(null);
+  const [speeds, setSpeeds] = useState({});
+  const AVAILABLE_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
+
+  const changeSpeed = (id, dir) => {
+    setSpeeds(prev => {
+      const cur = prev[id] || 1;
+      const i = AVAILABLE_SPEEDS.indexOf(cur);
+      const n = Math.max(0, Math.min(AVAILABLE_SPEEDS.length - 1, i + dir));
+      return { ...prev, [id]: AVAILABLE_SPEEDS[n] };
+    });
+  };
+
+  const playAudio = (text, id) => {
+    if (audioLoadingId || audioPlayingId === id) return;
+    setAudioLoadingId(id);
+    
+    setTimeout(() => {
+      setAudioLoadingId(null);
+      setAudioPlayingId(id);
+      
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'en-US';
+        utterance.rate = speeds[id] || 1; 
+        
+        utterance.onend = () => setAudioPlayingId(null);
+        utterance.onerror = () => setAudioPlayingId(null);
+        
+        window.speechSynthesis.speak(utterance);
+      } else {
+        setTimeout(() => setAudioPlayingId(null), 1500);
+      }
+    }, 300);
+  };
+
+  const audioObj = { playingId: audioPlayingId, loadingId: audioLoadingId, speeds, playAudio, changeSpeed };
+  const dueCards = deck.filter(c => c.nextReview <= Date.now());
+  const stats = { streak: 7, todayReviewed: deck.filter(c=>c.repetitions>0).length, todayDue: dueCards.length };
+
+  const renderTab = () => {
+    switch (activeTab) {
+      case 'generator':
+        return <GeneratorScreen
+          words={words}
+          setWords={setWords}
+          addToDeck={addToDeck}
+          pickWord={(w) => setSelectedWord({ word: w })}
+          audio={audioObj}
+        />;
+      case 'flashcards':
+        return <FlashcardsScreen
+          deck={deck}
+          updateCard={updateCard}
+          stats={stats}
+          audio={audioObj}
+          setTab={setActiveTab}
+        />;
+      case 'vocabulary':
+        return <VocabularyScreen
+          studiedWords={studiedWords}
+          addWordToVocab={addWordToVocab}
+          practiceWord={(w) => { setWords(w); setActiveTab('generator'); }}
+          simulateChat={() => setActiveTab('tutor')}
+        />;
+      case 'textStudy':
+        return <TextStudyScreen
+          addToDeck={addToDeck}
+          pickWord={(w) => setSelectedWord({ word: w })}
+          startTextChat={() => setActiveTab('tutor')}
+          audio={audioObj}
+        />;
+      case 'tutor':
+        return <TutorScreen
+          chatMessages={chatMessages} setChatMessages={setChatMessages}
+          teacherMessages={teacherMessages} setTeacherMessages={setTeacherMessages}
+          chatLevel={chatLevel} setChatLevel={setChatLevel}
+        />;
+      case 'fillin':
+        return <FillInScreen addToDeck={addToDeck} />;
+      case 'phonetics':
+        return <PhoneticsScreen audio={audioObj} />;
+      case 'immersion':
+        return <ImmersionScreen pickWord={(w) => setSelectedWord({ word: w })} audio={audioObj} />;
+      default: return null;
+    }
+  };
+
+  const dueCount = dueCards.length;
+
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: globalStyles }} />
+      <div className="min-h-screen flex flex-col lg:flex-row bg-[var(--bg-0)]">
+        <aside className="hidden lg:flex lg:flex-col w-[240px] border-r border-[var(--line)] bg-[var(--bg-0)] sticky top-0 h-screen">
+          <div className="px-5 py-5 hl-b">
+            <div className="flex items-center gap-3">
+              <div className="brand-mark"><i/><i/><i/><i/></div>
+              <div>
+                <div className="text-[15px] font-semibold tracking-tight text-[var(--text-hi)]">btree_english</div>
+                <div className="caps-sm font-mono text-[10px] text-[var(--text-lo)]">AI · SRS · v2.0</div>
+              </div>
+            </div>
+          </div>
+
+          {tweaks.showStreakBar && (
+            <div className="px-5 py-4 hl-b">
+              <div className="flex items-center justify-between mb-2">
+                <div className="caps-sm font-mono text-[10px] text-[var(--text-lo)]">Dias Seguidos</div>
+                <div className="flex items-center gap-1.5 text-[var(--accent)]">
+                  <Icon name="flame" size={12}/>
+                  <span className="font-mono text-[13px] font-bold tnum">{stats.streak}</span>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                {Array.from({length: 7}).map((_, i) => {
+                  const activeBars = stats.streak === 0 ? 0 : ((stats.streak - 1) % 7) + 1;
+                  return <div key={i} className={`flex-1 h-1.5 ${i < activeBars ? "bg-[var(--accent)]" : "bg-[var(--line)]"}`}/>;
+                })}
+              </div>
+              <div className="flex justify-between mt-2 text-[10px] font-mono text-[var(--text-dim)] caps-sm">
+                <span>S T Q Q S S D</span>
+                <span className="tnum">{stats.todayReviewed} hoje</span>
+              </div>
+            </div>
+          )}
+
+          <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+            {TABS.map(t => {
+              const active = activeTab === t.id;
+              const badge = t.id === 'flashcards' && dueCount > 0 ? dueCount : null;
+              return (
+                <button key={t.id} onClick={() => setActiveTab(t.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors relative group ${
+                    active ? "bg-[var(--bg-2)] text-[var(--text-hi)]" : "text-[var(--text-mid)] hover:text-[var(--text-hi)] hover:bg-[var(--bg-1)]"
+                  }`}>
+                  {active && <span className="absolute left-0 top-2 bottom-2 w-[2px] bg-[var(--accent)]"/>}
+                  <span className="font-mono text-[10px] text-[var(--text-dim)] tnum w-5">{t.num}</span>
+                  <Icon name={t.icon} size={15}/>
+                  <span className="text-[13px] font-medium flex-1">{t.label}</span>
+                  {badge && <span className="tag accent !py-0.5 !px-1.5 !text-[9px]">{badge}</span>}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="p-3 hl-t space-y-2">
+            <button className="w-full flex items-center justify-between px-3 py-2 text-[12px] text-[var(--text-mid)] hover:text-[var(--text-hi)] hover:bg-[var(--bg-1)]">
+              <span className="flex items-center gap-2"><Icon name="command" size={12}/> Atalhos</span>
+              <KeyHint keys={['⌘','K']}/>
+            </button>
+            <div className="px-3 pt-2 hl-t">
+              <div className="caps-sm font-mono text-[10px] text-[var(--text-dim)]">
+                <span className="inline-block w-1.5 h-1.5 bg-[var(--accent)] mr-1.5 pulse-dot align-middle"/>
+                Gemini 2.5 online
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <header className="lg:hidden flex items-center justify-between px-4 py-3 hl-b sticky top-0 bg-[var(--bg-0)] z-20">
+          <div className="flex items-center gap-2">
+            <div className="brand-mark"><i/><i/><i/><i/></div>
+            <span className="font-semibold tracking-tight">btree_english</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-[var(--accent)]">
+            <Icon name="flame" size={12}/>
+            <span className="font-mono text-[12px] font-bold tnum">{stats.streak}</span>
+          </div>
+        </header>
+
+        <main className="flex-1 min-w-0 px-4 sm:px-8 lg:px-12 py-6 lg:py-10 pb-24 lg:pb-10 max-w-[1080px] mx-auto w-full">
+          {renderTab()}
+        </main>
+
+        <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-[var(--bg-0)] hl-t flex overflow-x-auto z-30">
+          {TABS.map(t => {
+            const active = activeTab === t.id;
+            return (
+              <button key={t.id} onClick={() => setActiveTab(t.id)}
+                className={`flex-shrink-0 flex flex-col items-center justify-center gap-1 px-4 py-2.5 min-w-[72px] relative ${active ? "text-[var(--accent)]" : "text-[var(--text-lo)]"}`}>
+                <Icon name={t.icon} size={16}/>
+                <span className="text-[9px] font-mono uppercase tracking-wider">{t.label}</span>
+                {active && <span className="absolute top-0 w-6 h-[2px] bg-[var(--accent)]"/>}
+              </button>
+            );
+          })}
+        </nav>
+
+        {selectedWord && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4" onClick={() => setSelectedWord(null)}>
+            <div className="surface-2 p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+              <div className="caps-sm font-mono text-[11px] text-[var(--accent)] mb-3">Nova palavra</div>
+              <div className="text-[24px] font-display text-[var(--text-hi)] mb-2">"{selectedWord.word}"</div>
+              <div className="text-[13px] text-[var(--text-mid)] mb-6">Adicionar ao vocabulário e criar flashcard?</div>
+              <div className="flex gap-2">
+                <button onClick={() => setSelectedWord(null)} className="btn-ghost flex-1 justify-center">Cancelar</button>
+                <button 
+                  onClick={async () => {
+                    setModalLoading(true);
+                    await addWordToVocab(selectedWord.word);
+                    setModalLoading(false);
+                    setSelectedWord(null);
+                  }} 
+                  disabled={modalLoading}
+                  className="btn-primary flex-1 justify-center"
+                >
+                  {modalLoading ? <Spinner size={14}/> : <Icon name="plus" size={14}/>} Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <TweaksPanel tweaks={tweaks} setTweak={setTweak}/>
+      </div>
+    </>
+  );
+}

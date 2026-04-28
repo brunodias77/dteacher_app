@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <property name="LOG_DIR"     value="logs"/>
+    <property name="LOG_FILE"    value="dteacher"/>
+    <property name="MAX_HISTORY" value="30"/>
+    <property name="MAX_SIZE"    value="50MB"/>
+    <property name="TOTAL_CAP"   value="500MB"/>
+
+    <property name="CONSOLE_PATTERN"
+              value="%white(%d{HH:mm:ss.SSS}) %highlight(%-5level) %magenta([%-15.15thread]) %green([%X{requestId:-no-id}]) %cyan(%-36.36logger{36}) %white(—) %msg%n"/>
+
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>
+
+    <!-- ─── Console ─────────────────────────────────────────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ─── Rolling file ─────────────────────────────────────────── -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/${LOG_FILE}.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/${LOG_FILE}.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <timeBasedFileNamingAndTriggeringPolicy
+                    class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <maxFileSize>${MAX_SIZE}</maxFileSize>
+            </timeBasedFileNamingAndTriggeringPolicy>
+            <maxHistory>${MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${TOTAL_CAP}</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ─── Níveis por pacote ─────────────────────────────────────── -->
+    <logger name="com.dias.dteacher"              level="DEBUG"/>
+    <logger name="org.springframework.web"        level="INFO"/>
+    <logger name="org.springframework.security"   level="WARN"/>
+    <logger name="org.hibernate.SQL"              level="WARN"/>
+    <logger name="org.flywaydb"                   level="INFO"/>
+    <logger name="com.zaxxer.hikari"              level="WARN"/>
+
+    <!-- ─── Perfil: desenvolvimento ──────────────────────────────── -->
+    <springProfile name="default | dev">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- ─── Perfil: produção ─────────────────────────────────────── -->
+    <springProfile name="prod">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+</configuration>

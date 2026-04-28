@@ -1,0 +1,64 @@
+# ─── Sistema operacional ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDEs e editores ──────────────────────────────────────────────────────────
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+*.sublime-workspace
+*.launch
+.c9/
+
+# ─── Java / Maven (dteacher_backend) ──────────────────────────────────────────
+dteacher_backend/target/
+dteacher_backend/.mvn/wrapper/maven-wrapper.jar
+dteacher_backend/**/.apt_generated
+dteacher_backend/**/.classpath
+dteacher_backend/**/.factorypath
+dteacher_backend/**/.project
+dteacher_backend/**/.settings
+dteacher_backend/**/.springBeans
+dteacher_backend/**/.sts4-cache
+dteacher_backend/**/build/
+!dteacher_backend/**/src/main/**/build/
+!dteacher_backend/**/src/test/**/build/
+
+# ─── Angular / Node (dteacher_frontend) ───────────────────────────────────────
+dteacher_frontend/node_modules/
+dteacher_frontend/dist/
+dteacher_frontend/.angular/
+dteacher_frontend/tmp/
+dteacher_frontend/out-tsc/
+dteacher_frontend/bazel-out/
+dteacher_frontend/coverage/
+dteacher_frontend/.sass-cache/
+dteacher_frontend/typings/
+dteacher_frontend/__screenshots__/
+dteacher_frontend/npm-debug.log
+dteacher_frontend/yarn-error.log
+dteacher_frontend/connect.lock
+dteacher_frontend/libpeerconnection.log
+dteacher_frontend/testem.log
+
+# ─── Segredos e configurações locais ─────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local.properties
+application-local.yml
+application-local.yaml
+
+# ─── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ─── Docker (arquivos gerados localmente) ────────────────────────────────────
+docker/volumes/
