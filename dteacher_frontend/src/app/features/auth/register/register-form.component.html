@@ -1,0 +1,113 @@
+<form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4" novalidate>
+
+  <!-- Name -->
+  <div class="space-y-1.5">
+    <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo">
+      Nome <span class="text-text-dim">(opcional)</span>
+    </label>
+    <input
+      formControlName="name"
+      type="text"
+      class="input"
+      placeholder="Seu nome"
+      autocomplete="name"
+    />
+    @if (form.controls.name.invalid && form.controls.name.touched) {
+      <p class="text-[12px] text-danger">Nome deve ter no máximo 100 caracteres.</p>
+    }
+  </div>
+
+  <!-- Email -->
+  <div class="space-y-1.5">
+    <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo">
+      E-mail
+    </label>
+    <input
+      formControlName="email"
+      type="email"
+      class="input"
+      placeholder="seu@email.com"
+      autocomplete="email"
+    />
+    @if (form.controls.email.errors?.['required'] && form.controls.email.touched) {
+      <p class="text-[12px] text-danger">E-mail é obrigatório.</p>
+    } @else if (form.controls.email.errors?.['email'] && form.controls.email.touched) {
+      <p class="text-[12px] text-danger">E-mail deve ser um endereço válido.</p>
+    }
+  </div>
+
+  <!-- Password -->
+  <div class="space-y-1.5">
+    <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo">
+      Senha
+    </label>
+    <input
+      formControlName="password"
+      type="password"
+      class="input"
+      placeholder="Mínimo 8 caracteres e 1 número"
+      autocomplete="new-password"
+    />
+    @if (form.controls.password.errors?.['required'] && form.controls.password.touched) {
+      <p class="text-[12px] text-danger">Senha é obrigatória.</p>
+    } @else if (form.controls.password.errors?.['minlength'] && form.controls.password.touched) {
+      <p class="text-[12px] text-danger">Senha deve ter no mínimo 8 caracteres.</p>
+    } @else if (form.controls.password.errors?.['noNumber'] && form.controls.password.touched) {
+      <p class="text-[12px] text-danger">Senha deve conter pelo menos 1 número.</p>
+    }
+  </div>
+
+  <!-- Password confirmation -->
+  <div class="space-y-1.5">
+    <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo">
+      Confirmar senha
+    </label>
+    <input
+      formControlName="passwordConfirmation"
+      type="password"
+      class="input"
+      placeholder="Repita a senha"
+      autocomplete="new-password"
+    />
+    @if (form.controls.passwordConfirmation.errors?.['required'] && form.controls.passwordConfirmation.touched) {
+      <p class="text-[12px] text-danger">Confirmação de senha é obrigatória.</p>
+    } @else if (form.errors?.['passwordMismatch'] && form.controls.passwordConfirmation.touched) {
+      <p class="text-[12px] text-danger">Confirmação de senha não confere.</p>
+    }
+  </div>
+
+  <!-- API errors -->
+  @if (apiErrors().length > 0) {
+    <div class="border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.05)] px-4 py-3 space-y-1">
+      @for (err of apiErrors(); track err) {
+        <p class="text-[13px] text-danger">{{ err }}</p>
+      }
+    </div>
+  }
+
+  <!-- Submit -->
+  <button
+    type="submit"
+    class="btn-primary w-full justify-center mt-2"
+    [disabled]="loading()"
+  >
+    @if (loading()) {
+      <svg class="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <circle cx="12" cy="12" r="10" stroke-width="2" class="opacity-20"/>
+        <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+      </svg>
+      Criando conta…
+    } @else {
+      Criar conta
+    }
+  </button>
+
+</form>
+
+<!-- Login link -->
+<p class="text-center text-[13px] text-text-mid mt-6">
+  Já tem conta?
+  <a routerLink="/login" class="text-accent hover:brightness-110 transition-[filter] ml-1">
+    Entrar
+  </a>
+</p>
