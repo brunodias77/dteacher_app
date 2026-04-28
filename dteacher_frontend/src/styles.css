@@ -1,2 +1,164 @@
-/* You can add global styles to this file, and also import other style files */
 @import 'tailwindcss';
+
+@theme {
+  --color-bg-0: #0a0a0b;
+  --color-bg-1: #111113;
+  --color-bg-2: #18181b;
+  --color-bg-3: #1f1f22;
+
+  --color-line: #26262a;
+  --color-line-strong: #34343a;
+
+  --color-text-hi: #f5f5f4;
+  --color-text-mid: #a1a1aa;
+  --color-text-lo: #71717a;
+  --color-text-dim: #52525b;
+
+  --color-accent: #ccf381;
+  --color-accent-ink: #0a0a0b;
+
+  --color-danger: #f87171;
+  --color-warn: #fbbf24;
+  --color-ok: #86efac;
+  --color-info: #93c5fd;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: 'Fraunces', ui-serif, serif;
+}
+
+:root {
+  --accent-soft: rgba(204, 243, 129, 0.1);
+  --accent-border: rgba(204, 243, 129, 0.35);
+}
+
+html,
+body {
+  background: var(--color-bg-0);
+  color: var(--color-text-hi);
+  font-family: var(--font-sans);
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes wavebar {
+  0%,
+  100% {
+    transform: scaleY(0.6);
+  }
+  50% {
+    transform: scaleY(1.3);
+  }
+}
+
+@layer utilities {
+  .animate-fade-slide {
+    animation: fadeSlide 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .pulse-dot {
+    animation: pulseDot 1.4s ease-in-out infinite;
+  }
+
+  [data-density='compact'] .den-pad {
+    @apply px-4 py-3;
+  }
+
+  [data-density='cozy'] .den-pad {
+    @apply px-6 py-5;
+  }
+
+  [data-density='roomy'] .den-pad {
+    @apply px-8 py-7;
+  }
+}
+
+@layer components {
+  .surface {
+    @apply bg-bg-1 border border-line;
+  }
+
+  .surface-2 {
+    @apply bg-bg-2 border border-line;
+  }
+
+  .input {
+    @apply w-full bg-bg-0 border border-line-strong text-text-hi px-4 py-3.5
+           transition-colors outline-none focus:border-accent;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center gap-2 bg-accent text-accent-ink font-bold text-[13px]
+           px-[18px] py-3 border border-accent transition-[filter,transform]
+           hover:brightness-110 active:translate-y-px
+           disabled:opacity-45 disabled:cursor-not-allowed disabled:brightness-100;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 bg-transparent text-text-hi font-semibold text-[13px]
+           px-4 py-[11px] border border-line-strong transition-colors
+           hover:border-text-lo;
+  }
+
+  .chip-btn {
+    @apply inline-flex items-center gap-2 font-mono text-[11.5px] uppercase tracking-[0.12em]
+           px-3 py-[9px] border border-line bg-bg-1 text-text-hi
+           transition-[border-color,color,background];
+  }
+
+  .chip-btn:hover {
+    @apply border-line-strong;
+  }
+
+  .chip-btn.active {
+    @apply border-accent bg-accent text-accent-ink;
+  }
+
+  .chip-btn.ghost {
+    @apply bg-transparent;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em]
+           px-[7px] py-[3px] border border-line text-text-mid bg-bg-1;
+  }
+
+  .tag.accent {
+    @apply border-[var(--accent-border)] text-accent bg-[var(--accent-soft)];
+  }
+
+  .w-hover {
+    @apply cursor-pointer px-0.5 -mx-0.5 border-b border-dashed border-transparent
+           transition-all duration-[120ms]
+           hover:bg-accent hover:text-accent-ink hover:border-accent-ink;
+  }
+
+  .hl-t {
+    box-shadow: inset 0 1px 0 var(--color-line);
+  }
+
+  .hl-b {
+    box-shadow: inset 0 -1px 0 var(--color-line);
+  }
+}
