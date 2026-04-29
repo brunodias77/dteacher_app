@@ -1,0 +1,223 @@
+<div class="animate-fade-slide">
+
+  <!-- ── Estado: deck vazio ── -->
+  @if (cards().length === 0) {
+    <div>
+      <div class="mb-8">
+        <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">02 · Revisão</div>
+        <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight">
+          Deck <span class="font-display italic text-accent">vazio</span>.
+        </h1>
+      </div>
+
+      <div class="surface p-10 flex flex-col items-center text-center">
+        <pre class="font-mono text-[11px] leading-[1.4] text-text-dim mb-6 tracking-[0.15em]">·  ·  ·  ·  ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ( )   ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ·  ·  ·  ·  ·</pre>
+        <div class="mb-4 text-text-lo">
+          <app-icon name="layers" [size]="24" />
+        </div>
+        <div class="font-display text-[26px] text-text-hi leading-tight mb-2">Ainda não tem cartões.</div>
+        <p class="text-text-mid text-[13px] max-w-sm">
+          Gere novas frases ou analise textos para adicionar flashcards ao seu deck de memorização.
+        </p>
+        <div class="mt-6">
+          <a routerLink="/generator" class="btn-primary">
+            <app-icon name="sparkles" [size]="14" />
+            Ir para o Gerador
+          </a>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ── Estado: tudo revisto ── -->
+  @else if (dueCards().length === 0) {
+    <div>
+      <div class="mb-8">
+        <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">02 · Revisão</div>
+        <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight">
+          Tudo em <span class="font-display italic text-accent">dia</span>.
+        </h1>
+      </div>
+
+      <div class="surface p-10 flex flex-col items-center text-center">
+        <pre class="font-mono text-[11px] leading-[1.4] text-text-dim mb-6 tracking-[0.15em]">·  ·  ·  ·  ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ( )   ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ·  ·  ·  ·  ·</pre>
+        <div class="mb-4 text-text-lo">
+          <app-icon name="check" [size]="24" />
+        </div>
+        <div class="font-display text-[26px] text-text-hi leading-tight mb-2">Já reviu tudo por hoje.</div>
+        <p class="text-text-mid text-[13px] max-w-sm">
+          Volte daqui a algumas horas quando novos cartões estiverem prontos, ou gere novas frases e adicione-as ao deck.
+        </p>
+        <div class="mt-6 flex gap-2 justify-center">
+          <a routerLink="/generator" class="btn-primary">
+            <app-icon name="sparkles" [size]="14" />
+            Gerar frases
+          </a>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ── Estado: a rever ── -->
+  @else {
+    <div class="max-w-[720px] mx-auto">
+
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div>
+          <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">02 · Revisão</div>
+          <h1 class="text-[32px] font-semibold leading-[1.05] tracking-tight">A rever o deck</h1>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <span class="tag accent">{{ dueCards().length }} a rever</span>
+          <span class="tag">{{ cards().length }} total</span>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="mb-5">
+        <div class="flex justify-between text-[11px] font-mono uppercase tracking-[0.12em] text-text-lo mb-2">
+          <span>Progresso</span>
+          <span class="tabular-nums">{{ progress() | number: '1.0-0' }}%</span>
+        </div>
+        <div class="seg">
+          @for (i of SEGMENTS; track i) {
+            <span [class.on]="isSegOn(i)"></span>
+          }
+        </div>
+      </div>
+
+      <!-- Mode toggle + counter -->
+      <div class="flex items-center justify-between mb-4">
+        <div class="inline-flex border border-line">
+          <button
+            type="button"
+            class="chip-btn ghost border-0 border-r border-line"
+            [class.active]="reviewMode() === 'classic'"
+            (click)="setMode('classic')"
+          >
+            <app-icon name="eye" [size]="12" />
+            Clássico
+          </button>
+          <button
+            type="button"
+            class="chip-btn ghost border-0"
+            [class.active]="reviewMode() === 'typing'"
+            (click)="setMode('typing')"
+          >
+            <app-icon name="kbd" [size]="12" />
+            Escrita
+          </button>
+        </div>
+        <div class="font-mono text-[11px] text-text-dim tabular-nums">
+          {{ cards().length - dueCards().length + 1 }} / {{ cards().length }}
+        </div>
+      </div>
+
+      <!-- Card -->
+      <div class="surface-2 relative overflow-hidden">
+        <!-- progress accent line -->
+        <div
+          class="absolute top-0 left-0 h-[2px] bg-accent transition-all duration-500"
+          [style.width.%]="progress()"
+        ></div>
+
+        <div class="p-8 sm:p-12 min-h-[280px] flex flex-col items-center justify-center text-center">
+          <div class="font-mono text-[10.5px] uppercase tracking-[0.12em] text-text-dim mb-5">Frente · EN</div>
+          <div class="font-display text-[32px] sm:text-[36px] leading-[1.15] tracking-tight text-text-hi max-w-[24ch]">
+            {{ currentCard()?.english }}
+          </div>
+
+          <!-- Typing mode input (before flip) -->
+          @if (!isFlipped() && reviewMode() === 'typing') {
+            <div class="mt-8 w-full max-w-lg">
+              <input
+                class="input text-center"
+                placeholder="Escreva a tradução…"
+                [value]="userInput()"
+                (input)="userInput.set($any($event.target).value)"
+                (keydown)="onInputKeydown($event)"
+              />
+            </div>
+          }
+
+          <!-- Flipped content -->
+          @if (isFlipped()) {
+            <div class="animate-fade-slide w-full mt-10 space-y-6">
+              <div class="w-8 h-px bg-line-strong mx-auto"></div>
+
+              <div>
+                <div class="font-mono text-[10.5px] uppercase tracking-[0.12em] text-accent mb-3">Verso · PT</div>
+                <div class="text-[22px] text-text-hi font-medium">{{ currentCard()?.portuguese }}</div>
+              </div>
+
+              <!-- Typing mode answer feedback -->
+              @if (reviewMode() === 'typing') {
+                <div
+                  class="max-w-lg mx-auto p-4 border"
+                  [class.border-[var(--accent-border)]]="isCorrect()"
+                  [class.bg-[var(--accent-soft)]]="isCorrect()"
+                  [class.border-[rgba(248,113,113,0.3)]]="!isCorrect()"
+                  [class.bg-[rgba(248,113,113,0.05)]]="!isCorrect()"
+                >
+                  <div class="font-mono text-[10px] uppercase tracking-[0.1em] text-text-lo mb-1">A sua resposta</div>
+                  <div
+                    class="font-medium"
+                    [class.text-accent]="isCorrect()"
+                    [class.text-danger]="!isCorrect()"
+                  >
+                    {{ userInput() || '—' }}
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="mt-5">
+        @if (!isFlipped()) {
+          <button
+            type="button"
+            class="w-full btn-ghost justify-center py-4 hover:border-accent hover:text-accent"
+            [disabled]="reviewMode() === 'typing' && !userInput().trim()"
+            (click)="showAnswer()"
+          >
+            {{ reviewMode() === 'typing' ? 'Verificar resposta' : 'Mostrar resposta' }}
+            <app-icon name="arrow" [size]="14" />
+          </button>
+        } @else {
+          <div class="grid grid-cols-4 gap-2">
+            @for (g of GRADES; track g.key) {
+              <button
+                type="button"
+                class="surface-2 py-4 flex flex-col items-center gap-1 transition-colors group"
+                style="border-color: var(--color-line)"
+                (mouseenter)="$any($event.currentTarget).style.borderColor = g.color"
+                (mouseleave)="$any($event.currentTarget).style.borderColor = 'var(--color-line)'"
+                (click)="grade(g)"
+              >
+                <div [style.color]="g.color" class="transition-transform group-hover:scale-110">
+                  <app-icon [name]="g.icon" [size]="18" />
+                </div>
+                <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-hi">{{ g.label }}</div>
+                <div class="font-mono text-[10px] text-text-dim tabular-nums">{{ g.sub }}</div>
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+    </div>
+  }
+
+</div>

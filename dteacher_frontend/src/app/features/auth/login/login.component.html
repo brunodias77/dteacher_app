@@ -1,0 +1,44 @@
+<div class="min-h-screen bg-bg-0 flex items-center justify-center px-4">
+  <div class="w-full max-w-[420px] animate-fade-slide">
+
+    <!-- Brand -->
+    <div class="flex items-center gap-3 mb-10">
+      <div class="w-7 h-7 grid grid-cols-2 grid-rows-2 gap-0.5 bg-bg-0">
+        <i class="block bg-accent"></i>
+        <i class="block bg-text-hi"></i>
+        <i class="block bg-text-hi"></i>
+        <i class="block bg-text-hi"></i>
+      </div>
+      <span class="font-mono text-[13px] text-text-mid tracking-tight">dTeacher</span>
+    </div>
+
+    <!-- Success banner -->
+    @if (registered()) {
+      <div class="border border-[rgba(74,222,128,0.3)] bg-[rgba(74,222,128,0.05)] px-4 py-3 mb-6">
+        <p class="text-[13px] text-green-400">Conta criada com sucesso! Faça login para continuar.</p>
+      </div>
+    }
+
+    <!-- Header -->
+    <div class="mb-8">
+      <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-3">
+        Entrar
+      </div>
+      <h1 class="text-[32px] font-semibold leading-[1.05] tracking-tight text-text-hi">
+        Bem-vindo de volta
+        <span class="font-display italic text-accent">dTeacher</span>
+      </h1>
+      <p class="text-text-mid text-[13px] mt-3">
+        Entre na sua conta para continuar.
+      </p>
+    </div>
+
+    <!-- Form -->
+    <app-login-form
+      [loading]="loading()"
+      [apiErrors]="apiErrors()"
+      (submitted)="onSubmit($event)"
+    />
+
+  </div>
+</div>

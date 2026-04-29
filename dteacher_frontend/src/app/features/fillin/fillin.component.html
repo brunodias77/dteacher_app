@@ -1,0 +1,356 @@
+<!-- ── SETUP STATE ── -->
+@if (isSetup()) {
+  <div class="animate-fade-slide space-y-10">
+
+    <div>
+      <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">06 · Fill-in</div>
+      <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight max-w-[26ch] text-text-mid">
+        Complete a <span class="font-display italic">frase</span> com a palavra certa.
+      </h1>
+      <p class="text-text-mid text-[14px] mt-3 max-w-[52ch]">
+        Envie as palavras que quer treinar. A IA cria frases naturais com lacunas — escreva ou escolha entre alternativas.
+      </p>
+    </div>
+
+    <div class="surface p-5 sm:p-6 space-y-4">
+
+      <!-- Words textarea -->
+      <div>
+        <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo mb-2 block">
+          Palavras a treinar
+        </label>
+        <textarea
+          rows="3"
+          class="input font-mono text-[13px] resize-none leading-relaxed"
+          placeholder="travel, airport, ticket, book, reserve"
+          [value]="words()"
+          (input)="onWordsInput($event)"
+        ></textarea>
+        <div class="flex flex-wrap gap-2 mt-3">
+          <span class="font-mono text-[10.5px] text-text-dim mr-1 self-center">Sugestões:</span>
+          @for (t of TOPIC_SUGGESTIONS; track t) {
+            <button
+              type="button"
+              class="tag hover:border-line-strong hover:text-text-hi transition-colors"
+              (click)="setSuggestion(t)"
+            >
+              {{ t }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Level + Mode -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 hl-t">
+        <div>
+          <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo mb-2 block">Nível</label>
+          <div class="flex flex-wrap gap-1">
+            @for (l of CEFR_LEVELS; track l) {
+              <button
+                type="button"
+                class="chip-btn ghost text-[11px] py-2 px-3"
+                [class.active]="level() === l"
+                (click)="setLevel(l)"
+              >
+                {{ l }}
+              </button>
+            }
+          </div>
+        </div>
+        <div>
+          <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo mb-2 block">Modo</label>
+          <div class="flex gap-1">
+            <button
+              type="button"
+              class="chip-btn ghost flex-1 justify-center"
+              [class.active]="mode() === 'typing'"
+              (click)="setMode('typing')"
+            >
+              <app-icon name="kbd" [size]="12" />
+              Digitar
+            </button>
+            <button
+              type="button"
+              class="chip-btn ghost flex-1 justify-center"
+              [class.active]="mode() === 'multiple'"
+              (click)="setMode('multiple')"
+            >
+              <app-icon name="check" [size]="12" />
+              Múltipla
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generate button -->
+      <div class="pt-4 hl-t">
+        <button
+          type="button"
+          class="btn-primary w-full justify-center py-4"
+          [disabled]="loading() || !words().trim()"
+          (click)="generate()"
+        >
+          @if (loading()) {
+            <span class="flex gap-1 items-center">
+              <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: 0s"></span>
+              <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: .2s"></span>
+              <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: .4s"></span>
+              A gerar 10 exercícios…
+            </span>
+          } @else {
+            <app-icon name="sparkles" [size]="14" />
+            Gerar {{ mode() === 'typing' ? '10 frases' : '10 frases com opções' }}
+          }
+        </button>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      @for (s of [{n:'01',t:'Envie palavras',d:'Vocabulário que quer treinar agora'},{n:'02',t:'IA cria frases',d:'Contextualizadas no seu nível CEFR'},{n:'03',t:'Complete & acerte',d:'A digitar ou a escolher entre opções'}]; track s.n) {
+        <div class="surface p-4">
+          <div class="font-mono text-[11px] text-text-dim mb-2 tabular-nums">{{ s.n }}</div>
+          <div class="text-[14px] font-semibold text-text-hi mb-1">{{ s.t }}</div>
+          <div class="text-[12px] text-text-mid">{{ s.d }}</div>
+        </div>
+      }
+    </div>
+  </div>
+}
+
+<!-- ── SUMMARY STATE ── -->
+@if (isSummary()) {
+  <div class="animate-fade-slide max-w-[600px] mx-auto mt-10">
+    <div class="surface p-12 flex flex-col items-center text-center">
+
+      <div class="w-16 h-16 bg-accent text-accent-ink flex items-center justify-center mb-6">
+        <app-icon name="trophy" [size]="32" />
+      </div>
+
+      <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">Sessão concluída</div>
+      <h2 class="text-[32px] font-display font-semibold text-text-hi mb-2">O seu Resultado</h2>
+      <p class="text-[16px] text-text-mid mb-8">
+        Acertou <strong class="text-text-hi">{{ correct() }}</strong> de
+        <strong class="text-text-hi">{{ total() }}</strong> questões
+        ({{ (correct() / total()) * 100 | number: '1.0-0' }}%).
+      </p>
+
+      <!-- Result bar -->
+      <div class="flex gap-1 w-full max-w-sm mb-10">
+        @for (r of results(); track $index; let i = $index) {
+          <div
+            class="flex-1 h-2"
+            [class.bg-accent]="r.correct"
+            [class.bg-danger]="!r.correct"
+          ></div>
+        }
+      </div>
+
+      <button type="button" class="btn-primary py-4 px-8 justify-center w-full sm:w-auto" (click)="reset()">
+        <app-icon name="rotate" [size]="14" />
+        Praticar Novamente
+      </button>
+    </div>
+  </div>
+}
+
+<!-- ── EXERCISE STATE ── -->
+@if (isExercise()) {
+  <div class="animate-fade-slide max-w-[760px] mx-auto">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+      <div>
+        <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">06 · Fill-in</div>
+        <h1 class="text-[28px] font-semibold leading-[1.05] tracking-tight">Complete as frases</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="tag">{{ level() }}</span>
+        <span class="tag border-[var(--accent-border)] text-accent bg-[var(--accent-soft)]">
+          <app-icon name="check" [size]="10" />
+          {{ correct() }}/{{ total() }}
+        </span>
+        <button type="button" class="chip-btn ghost" title="Reiniciar" (click)="reset()">
+          <app-icon name="rotate" [size]="12" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="mb-5">
+      <div class="flex justify-between text-[11px] font-mono text-text-lo mb-2">
+        <span>Exercício {{ idx() + 1 }} de {{ total() }}</span>
+        <span class="tabular-nums">{{ progress() | number: '1.0-0' }}%</span>
+      </div>
+      <div class="seg">
+        @for (ex of exercises(); track $index; let i = $index) {
+          <span [class]="resultClass(i)" [style.background]="results()[i] && !results()[i].correct ? 'var(--danger)' : ''"></span>
+        }
+      </div>
+    </div>
+
+    <!-- Exercise card -->
+    <div class="surface-2 p-8 sm:p-10">
+      <div class="flex items-start justify-between mb-6">
+        <div class="font-mono text-[10.5px] text-text-dim">Frase {{ idx() + 1 }}</div>
+        <span class="tag">{{ exercise().difficulty }}</span>
+      </div>
+
+      <!-- Sentence with blank -->
+      <div class="text-[28px] sm:text-[32px] font-display leading-[1.3] text-text-hi mb-2">
+        {{ sentenceParts()[0] }}
+
+        @if (revealed()) {
+          <!-- Revealed answer -->
+          <span
+            class="inline-flex items-baseline px-3 py-1 mx-1 font-semibold"
+            [class.bg-accent-soft]="isCorrect()"
+            [class.text-accent]="isCorrect()"
+            [class.border]="true"
+            [class.border-accent-border]="isCorrect()"
+            [style.background]="!isCorrect() ? 'rgba(248,113,113,0.08)' : ''"
+            [style.color]="!isCorrect() ? 'var(--danger)' : ''"
+            [style.borderColor]="!isCorrect() ? 'rgba(248,113,113,0.3)' : ''"
+          >
+            {{ userInput() || '—' }}
+          </span>
+        } @else if (mode() === 'typing') {
+          <!-- Typing input inline -->
+          <input
+            class="inline-block bg-bg-0 border-b-2 border-accent outline-none font-display font-semibold text-text-hi mx-2 px-2 py-1 min-w-[140px] text-center text-[28px] sm:text-[32px]"
+            placeholder="…"
+            [value]="userInput()"
+            (input)="onUserInput($event)"
+            (keydown)="onKeydown($event)"
+            autofocus
+          />
+        } @else {
+          <!-- Multiple choice blank placeholder -->
+          <span class="inline-block border-b-2 border-dashed border-text-dim min-w-[140px] mx-2 text-text-dim text-center px-2">
+            ______
+          </span>
+        }
+
+        {{ sentenceParts()[1] }}
+      </div>
+
+      <!-- Translation -->
+      <div class="text-[13px] text-text-mid italic">{{ exercise().translation }}</div>
+
+      <!-- Multiple choice options -->
+      @if (mode() === 'multiple' && !revealed()) {
+        <div class="grid grid-cols-2 gap-2 mt-8">
+          @for (opt of exercise().options; track opt; let i = $index) {
+            <button
+              type="button"
+              class="surface p-4 text-left transition-colors"
+              [class.border-accent]="userInput() === opt"
+              [class.bg-accent-soft]="userInput() === opt"
+              (click)="selectOption(opt)"
+            >
+              <div class="flex items-center gap-3">
+                <span
+                  class="w-6 h-6 border flex items-center justify-center font-mono text-[11px]"
+                  [class.border-accent]="userInput() === opt"
+                  [class.bg-accent]="userInput() === opt"
+                  [class.text-accent-ink]="userInput() === opt"
+                  [class.border-line-strong]="userInput() !== opt"
+                  [class.text-text-lo]="userInput() !== opt"
+                >
+                  {{ 'ABCD'[i] }}
+                </span>
+                <span
+                  class="text-[15px]"
+                  [class.text-text-hi]="userInput() === opt"
+                  [class.font-semibold]="userInput() === opt"
+                  [class.text-text-mid]="userInput() !== opt"
+                >
+                  {{ opt }}
+                </span>
+              </div>
+            </button>
+          }
+        </div>
+      }
+
+      <!-- Hint row -->
+      @if (!revealed()) {
+        <div class="flex items-center gap-3 mt-6 pt-6 hl-t">
+          <button type="button" class="chip-btn ghost" (click)="toggleHint()">
+            <app-icon name="bulb" [size]="12" />
+            {{ showHint() ? 'Ocultar dica' : 'Ver dica' }}
+          </button>
+          @if (showHint()) {
+            <span class="text-[12px] text-text-mid italic">{{ exercise().hint }}</span>
+          }
+        </div>
+      }
+
+      <!-- Feedback after reveal -->
+      @if (revealed()) {
+        <div class="mt-6 pt-6 hl-t space-y-4 animate-fade-slide">
+          <div
+            class="p-4 border"
+            [class.border-accent-border]="isCorrect()"
+            [class.bg-accent-soft]="isCorrect()"
+            [style.borderColor]="!isCorrect() ? 'rgba(248,113,113,0.3)' : ''"
+            [style.background]="!isCorrect() ? 'rgba(248,113,113,0.05)' : ''"
+          >
+            <div class="flex items-start gap-3">
+              <div [class.text-accent]="isCorrect()" [class.text-danger]="!isCorrect()">
+                <app-icon [name]="isCorrect() ? 'check' : 'x'" [size]="18" />
+              </div>
+              <div class="flex-1">
+                <div
+                  class="text-[14px] font-semibold mb-1"
+                  [class.text-accent]="isCorrect()"
+                  [class.text-danger]="!isCorrect()"
+                >
+                  {{ isCorrect() ? 'Correto!' : 'Não é essa.' }}
+                </div>
+                @if (!isCorrect()) {
+                  <div class="text-[13px] text-text-mid">
+                    Resposta correta: <span class="font-semibold text-text-hi font-mono">{{ exercise().answer }}</span>
+                  </div>
+                }
+                <div class="text-[12px] text-text-mid mt-2 italic">{{ exercise().hint }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Action buttons -->
+    <div class="mt-5 flex gap-2">
+      @if (!revealed()) {
+        <button
+          type="button"
+          class="btn-primary flex-1 justify-center py-4"
+          [disabled]="!userInput().trim()"
+          (click)="reveal()"
+        >
+          Verificar resposta
+          <app-icon name="arrow" [size]="14" />
+        </button>
+      } @else {
+        <button type="button" class="btn-ghost" (click)="reset()">
+          <app-icon name="plus" [size]="14" />
+          Novo exercício
+        </button>
+        @if (idx() < total() - 1) {
+          <button type="button" class="btn-primary flex-1 justify-center py-4" (click)="next()">
+            Próxima
+            <app-icon name="arrow" [size]="14" />
+          </button>
+        } @else {
+          <button type="button" class="btn-primary flex-1 justify-center py-4" (click)="showSummary()">
+            <app-icon name="trophy" [size]="14" />
+            Ver resultado
+          </button>
+        }
+      }
+    </div>
+
+  </div>
+}

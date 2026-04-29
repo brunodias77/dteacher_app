@@ -1,0 +1,151 @@
+<div class="animate-fade-slide space-y-8">
+
+  <!-- Header -->
+  <div>
+    <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">07 · Fonética</div>
+    <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight">
+      Domine a <span class="font-display italic text-accent">pronúncia</span> exata.
+    </h1>
+    <p class="text-text-mid text-[14px] mt-3 max-w-[52ch]">
+      Escreva uma frase para obter a pronúncia figurada — uma forma simples de ler como se fala usando os sons e acentos do português.
+    </p>
+  </div>
+
+  <!-- Input card -->
+  <div class="surface p-5 sm:p-6 space-y-4">
+    <textarea
+      rows="3"
+      class="input font-mono text-[13px] resize-none leading-relaxed"
+      placeholder="Ex: I would like a cup of coffee, please."
+      [value]="input()"
+      (input)="onInput($event)"
+      (keydown)="onKeydown($event)"
+    ></textarea>
+
+    <!-- Suggestion chips -->
+    <div class="flex flex-wrap gap-2">
+      <span class="font-mono text-[10.5px] text-text-dim self-center mr-1">Exemplos:</span>
+      @for (phrase of EXAMPLE_PHRASES; track phrase) {
+        <button
+          type="button"
+          class="tag hover:border-line-strong hover:text-text-hi transition-colors"
+          (click)="setInput(phrase)"
+        >
+          {{ phrase }}
+        </button>
+      }
+    </div>
+
+    <!-- Error -->
+    @if (errorMsg()) {
+      <div class="text-[13px] text-danger flex items-center gap-2">
+        <app-icon name="alert" [size]="14" />
+        {{ errorMsg() }}
+      </div>
+    }
+
+    <!-- Action row -->
+    <div class="flex justify-end pt-2 hl-t">
+      <div class="flex items-center gap-2 text-[11px] font-mono text-text-dim mr-auto">
+        Ctrl + Enter para transcrever
+      </div>
+      <button
+        type="button"
+        class="btn-primary"
+        [disabled]="loading() || !input().trim()"
+        (click)="transcribe()"
+      >
+        @if (loading()) {
+          <span class="flex gap-1 items-center">
+            <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: 0s"></span>
+            <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: .2s"></span>
+            <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: .4s"></span>
+            A transcrever…
+          </span>
+        } @else {
+          <app-icon name="zap" [size]="14" />
+          Transcrever
+        }
+      </button>
+    </div>
+  </div>
+
+  <!-- Result -->
+  @if (hasResult()) {
+    <div class="space-y-8 animate-fade-slide">
+
+      <!-- Main phonetic card -->
+      <div class="surface-2 p-6 sm:p-8 relative overflow-hidden">
+
+        <!-- Background decoration -->
+        <div class="absolute top-0 right-0 p-4 opacity-[0.04] pointer-events-none select-none">
+          <app-icon name="zap" [size]="120" />
+        </div>
+
+        <div class="relative z-10">
+          <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-accent mb-3">Como se lê</div>
+
+          <!-- Phonetic transcription -->
+          <div class="font-mono text-[24px] sm:text-[32px] text-accent leading-relaxed tracking-wide mb-4">
+            {{ result()!.phonetic }}
+          </div>
+
+          <!-- Original + translation -->
+          <div class="text-[18px] text-text-hi font-display mb-1">{{ result()!.original }}</div>
+          <div class="text-[13px] text-text-mid italic mb-6">{{ result()!.translation }}</div>
+
+          <!-- Audio button -->
+          <button type="button" class="btn-ghost" (click)="togglePlay()">
+            @if (playing()) {
+              <!-- Wave animation -->
+              <span class="flex items-end gap-[2px] h-[14px]">
+                <span class="w-[3px] bg-accent animate-bounce" style="height:60%;animation-delay:0s"></span>
+                <span class="w-[3px] bg-accent animate-bounce" style="height:100%;animation-delay:.1s"></span>
+                <span class="w-[3px] bg-accent animate-bounce" style="height:45%;animation-delay:.2s"></span>
+                <span class="w-[3px] bg-accent animate-bounce" style="height:80%;animation-delay:.05s"></span>
+                <span class="w-[3px] bg-accent animate-bounce" style="height:55%;animation-delay:.15s"></span>
+                <span class="w-[3px] bg-accent animate-bounce" style="height:70%;animation-delay:.25s"></span>
+              </span>
+              A reproduzir…
+            } @else {
+              <app-icon name="volume" [size]="14" />
+              Ouvir Pronúncia Original
+            }
+          </button>
+        </div>
+      </div>
+
+      <!-- Word-by-word tips -->
+      @if (result()!.words.length > 0) {
+        <div>
+          <div class="mb-4">
+            <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-text-lo mb-1">07.1 · Dicas</div>
+            <h2 class="text-[22px] font-semibold leading-tight">Foco na articulação</h2>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            @for (w of result()!.words; track w.word) {
+              <div class="surface p-4">
+                <div class="flex items-baseline justify-between mb-2">
+                  <span class="font-bold text-[16px] text-text-hi">{{ w.word }}</span>
+                  <span class="font-mono text-[13px] text-accent">{{ w.phonetic }}</span>
+                </div>
+                <div class="text-[13px] text-text-mid leading-relaxed">{{ w.tip }}</div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Try another -->
+      <div class="flex justify-center pt-2">
+        <button type="button" class="btn-ghost" (click)="setInput('')">
+          <app-icon name="rotate" [size]="14" />
+          Transcrever outra frase
+        </button>
+      </div>
+
+    </div>
+  }
+
+</div>
