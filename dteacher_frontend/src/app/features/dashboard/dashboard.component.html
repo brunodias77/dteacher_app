@@ -1,0 +1,43 @@
+<div class="min-h-screen bg-bg-0">
+
+  <!-- Header -->
+  <header class="bg-bg-1 border-b border-line">
+    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+
+      <!-- Brand -->
+      <div class="flex items-center gap-3">
+        <div class="w-6 h-6 grid grid-cols-2 grid-rows-2 gap-[3px] bg-bg-1">
+          <i class="block bg-accent"></i>
+          <i class="block bg-text-hi"></i>
+          <i class="block bg-text-hi"></i>
+          <i class="block bg-text-hi"></i>
+        </div>
+        <span class="font-mono text-[13px] text-text-mid tracking-tight">dTeacher</span>
+      </div>
+
+      <!-- User info + logout -->
+      <div class="flex items-center gap-5">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 bg-accent flex items-center justify-center">
+            <span class="font-mono text-[10px] font-bold text-accent-ink leading-none">
+              {{ (user()?.name || user()?.email || '?').charAt(0).toUpperCase() }}
+            </span>
+          </div>
+          <span class="text-[13px] text-text-mid">
+            {{ user()?.name || user()?.email }}
+          </span>
+        </div>
+
+        <app-button variant="ghost" size="sm" (click)="logout()">
+          Sair
+        </app-button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Main content -->
+  <main class="max-w-6xl mx-auto px-6 py-10">
+  </main>
+
+</div>

@@ -1,17 +1,7 @@
 <form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4" novalidate>
 
   <app-input
-    id="reg-name"
-    formControlName="name"
-    label="Nome"
-    hint="(opcional)"
-    placeholder="Seu nome"
-    autocomplete="name"
-    [error]="nameError()"
-  />
-
-  <app-input
-    id="reg-email"
+    id="login-email"
     formControlName="email"
     label="E-mail"
     type="email"
@@ -21,25 +11,14 @@
   />
 
   <app-input
-    id="reg-password"
+    id="login-password"
     formControlName="password"
     label="Senha"
     type="password"
-    placeholder="Mínimo 8 caracteres e 1 número"
-    autocomplete="new-password"
+    placeholder="Mínimo 8 caracteres"
+    autocomplete="current-password"
     showPasswordToggle
     [error]="passwordError()"
-  />
-
-  <app-input
-    id="reg-password-confirm"
-    formControlName="passwordConfirmation"
-    label="Confirmar senha"
-    type="password"
-    placeholder="Repita a senha"
-    autocomplete="new-password"
-    showPasswordToggle
-    [error]="passwordConfirmError()"
   />
 
   <!-- API errors -->
@@ -52,15 +31,15 @@
   }
 
   <app-button type="submit" [loading]="loading()" block class="mt-2">
-    {{ loading() ? 'Criando conta…' : 'Criar conta' }}
+    {{ loading() ? 'Entrando…' : 'Entrar' }}
   </app-button>
 
 </form>
 
-<!-- Login link -->
+<!-- Register link -->
 <p class="text-center text-[13px] text-text-mid mt-6">
-  Já tem conta?
-  <a routerLink="/login" class="text-accent hover:brightness-110 transition-[filter] ml-1">
-    Entrar
+  Não tem conta?
+  <a routerLink="/register" class="text-accent hover:brightness-110 transition-[filter] ml-1">
+    Criar conta
   </a>
 </p>
