@@ -1,0 +1,45 @@
+<form [formGroup]="form" (ngSubmit)="submit()" class="space-y-4" novalidate>
+
+  <app-input
+    id="login-email"
+    formControlName="email"
+    label="E-mail"
+    type="email"
+    placeholder="seu@email.com"
+    autocomplete="email"
+    [error]="emailError()"
+  />
+
+  <app-input
+    id="login-password"
+    formControlName="password"
+    label="Senha"
+    type="password"
+    placeholder="Mínimo 8 caracteres"
+    autocomplete="current-password"
+    showPasswordToggle
+    [error]="passwordError()"
+  />
+
+  <!-- API errors -->
+  @if (apiErrors().length > 0) {
+    <div class="border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.05)] px-4 py-3 space-y-1">
+      @for (err of apiErrors(); track err) {
+        <p class="text-[13px] text-danger">{{ err }}</p>
+      }
+    </div>
+  }
+
+  <app-button type="submit" [loading]="loading()" block class="mt-2">
+    {{ loading() ? 'Entrando…' : 'Entrar' }}
+  </app-button>
+
+</form>
+
+<!-- Register link -->
+<p class="text-center text-[13px] text-text-mid mt-6">
+  Não tem conta?
+  <a routerLink="/register" class="text-accent hover:brightness-110 transition-[filter] ml-1">
+    Criar conta
+  </a>
+</p>

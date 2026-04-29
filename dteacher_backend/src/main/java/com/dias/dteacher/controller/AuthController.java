@@ -2,6 +2,8 @@ package com.dias.dteacher.controller;
 
 import com.dias.dteacher.usecase.auth.login.LoginUserRequest;
 import com.dias.dteacher.usecase.auth.login.LoginUserUseCase;
+import com.dias.dteacher.usecase.auth.logout.LogoutUserRequest;
+import com.dias.dteacher.usecase.auth.logout.LogoutUserUseCase;
 import com.dias.dteacher.usecase.auth.register.RegisterUserRequest;
 import com.dias.dteacher.usecase.auth.register.RegisterUserUseCase;
 import com.dias.dteacher.validation.Notification;
@@ -20,6 +22,7 @@ public class AuthController {
 
     private final RegisterUserUseCase registerUserUseCase;
     private final LoginUserUseCase    loginUserUseCase;
+    private final LogoutUserUseCase   logoutUserUseCase;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterUserRequest request) {
@@ -34,6 +37,14 @@ public class AuthController {
         return loginUserUseCase.execute(request).fold(
                 n -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(n),
                 body -> ResponseEntity.ok(body)
+        );
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout() {
+        return logoutUserUseCase.execute(new LogoutUserRequest()).fold(
+                notification -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(notification),
+                body -> ResponseEntity.noContent().build()
         );
     }
 

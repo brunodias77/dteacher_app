@@ -37,3 +37,7 @@ cors:
 jwt:
   secret: ${JWT_SECRET:bXVkZS1zZWNyZXQta2V5LXRoYXQtaXMtYXQtbGVhc3QtMjU2LWJpdHMtbG9uZy0x}
   expiration-ms: 86400000
+
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  model: ${GEMINI_MODEL:gemini-3-flash-preview}

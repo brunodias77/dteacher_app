@@ -1,0 +1,299 @@
+<div class="animate-fade-slide">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
+    <div>
+      <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">05 · Tutor IA</div>
+      <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight">
+        @if (isChat()) {
+          Conversa <span class="font-display italic text-accent">real</span> com feedback.
+        } @else {
+          Pergunte <span class="font-display italic text-accent">qualquer coisa</span>.
+        }
+      </h1>
+    </div>
+
+    <!-- Mode toggle -->
+    <div class="inline-flex border border-line bg-bg-1 p-1 gap-1 self-start sm:self-auto">
+      <button
+        type="button"
+        class="chip-btn ghost border-0 py-2 px-4"
+        [class.active]="isChat()"
+        (click)="setMode('chat')"
+      >
+        <app-icon name="chat" [size]="12" />
+        Conversar
+      </button>
+      <button
+        type="button"
+        class="chip-btn ghost border-0 py-2 px-4"
+        [class.active]="!isChat()"
+        (click)="setMode('teacher')"
+      >
+        <app-icon name="brain" [size]="12" />
+        Dúvidas
+      </button>
+    </div>
+  </div>
+
+  <!-- Grid: chat panel + sidebar -->
+  <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
+
+    <!-- ── Main chat panel ── -->
+    <div class="surface flex flex-col h-[600px] relative">
+
+      <!-- Panel header -->
+      <div class="flex items-center justify-between px-5 py-3 hl-b">
+        <div class="flex items-center gap-3">
+          @if (isChat()) {
+            <div class="w-8 h-8 flex items-center justify-center font-mono font-bold text-[13px] bg-accent text-accent-ink">
+              A
+            </div>
+          } @else {
+            <div class="w-8 h-8 flex items-center justify-center border border-accent bg-[var(--accent-soft)] text-accent">
+              <app-icon name="brain" [size]="16" />
+            </div>
+          }
+          <div>
+            <div class="text-[13px] font-semibold text-text-hi">
+              {{ isChat() ? 'Alex · ' + chatLevel() : 'Prof. Gemini' }}
+            </div>
+            <div class="text-[11px] font-mono text-text-lo flex items-center gap-1.5">
+              @if (isChat()) {
+                <span class="w-1.5 h-1.5 bg-accent pulse-dot inline-block"></span>
+                online
+              } @else {
+                especialista em inglês prático
+              }
+            </div>
+          </div>
+        </div>
+        @if (isChat()) {
+          <span class="tag">CEFR {{ chatLevel() }}</span>
+        }
+      </div>
+
+      <!-- Messages -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-4 flex flex-col">
+
+        <!-- Chat empty state -->
+        @if (isChat() && chatMessages().length === 0 && !loading()) {
+          <div class="flex-1 flex flex-col items-center justify-center opacity-50">
+            <app-icon name="chat" [size]="32" />
+            <p class="text-[13px] text-text-mid text-center max-w-[200px] mt-3">
+              Inicie uma conversa clicando em "Nova Conversa" ou envie uma mensagem.
+            </p>
+          </div>
+        }
+
+        <!-- Teacher empty state -->
+        @if (!isChat() && teacherMessages().length === 0 && !loading()) {
+          <div class="flex-1 flex flex-col items-center justify-center opacity-50">
+            <app-icon name="brain" [size]="32" />
+            <p class="text-[13px] text-text-mid text-center max-w-[240px] mt-3">
+              Tem dúvidas sobre inglês? O professor de IA está pronto para ajudar.
+            </p>
+          </div>
+        }
+
+        <!-- Message list -->
+        @for (msg of messages(); track $index; let i = $index) {
+          <div
+            class="flex gap-3"
+            [class.justify-end]="msg.sender === 'USER' && isChat()"
+            [class.flex-row-reverse]="msg.sender === 'USER' && !isChat()"
+            [class.justify-start]="msg.sender === 'AI'"
+          >
+            <!-- Teacher mode avatars -->
+            @if (!isChat()) {
+              <div
+                class="w-7 h-7 flex items-center justify-center flex-shrink-0 font-mono text-[11px] font-bold"
+                [class.bg-bg-2]="msg.sender === 'USER'"
+                [class.text-text-hi]="msg.sender === 'USER'"
+                [class.bg-accent]="msg.sender === 'AI'"
+                [class.text-accent-ink]="msg.sender === 'AI'"
+              >
+                {{ msg.sender === 'USER' ? 'V' : 'P' }}
+              </div>
+            }
+
+            <div class="max-w-[80%]" [class.text-right]="msg.sender === 'USER'">
+              <!-- Bubble -->
+              <div
+                class="text-[14px] leading-relaxed"
+                [class.inline-block]="isChat()"
+                [class.px-4]="isChat()"
+                [class.py-3]="isChat()"
+                [class.p-4]="!isChat()"
+                [class.bg-accent]="msg.sender === 'USER' && isChat()"
+                [class.text-accent-ink]="msg.sender === 'USER' && isChat()"
+                [class.surface-2]="(msg.sender === 'USER' && !isChat()) || (msg.sender === 'AI' && isChat())"
+                [class.text-left]="msg.sender === 'USER' && !isChat()"
+                [class.bg-bg-2]="msg.sender === 'AI' && !isChat()"
+                [class.border]="msg.sender === 'AI' && !isChat()"
+                [class.border-line]="msg.sender === 'AI' && !isChat()"
+              >
+                {{ msg.text }}
+              </div>
+
+              <!-- Translation (chat AI) -->
+              @if (isChat() && msg.sender === 'AI' && $any(msg).translation) {
+                <div
+                  class="text-[11px] text-text-dim mt-1 font-mono blur-sm hover:blur-none transition-all duration-300 cursor-help"
+                  title="Ver tradução"
+                >
+                  {{ $any(msg).translation }}
+                </div>
+              }
+
+              <!-- Feedback (chat USER) -->
+              @if (isChat() && msg.sender === 'USER' && $any(msg).feedback) {
+                <div class="mt-2 p-3 border border-[var(--accent-border)] bg-[var(--accent-soft)] text-left max-w-[90%]">
+                  <div class="font-mono text-[10px] uppercase tracking-[0.1em] text-accent mb-1 flex items-center gap-1">
+                    <app-icon name="bulb" [size]="10" />
+                    Feedback do professor
+                  </div>
+                  <div class="text-[12.5px] text-text-mid">{{ $any(msg).feedback }}</div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        <!-- Typing indicator -->
+        @if (loading()) {
+          <div class="flex gap-1 p-2">
+            <span class="w-1.5 h-1.5 bg-text-lo pulse-dot inline-block" style="animation-delay: 0s"></span>
+            <span class="w-1.5 h-1.5 bg-text-lo pulse-dot inline-block" style="animation-delay: .2s"></span>
+            <span class="w-1.5 h-1.5 bg-text-lo pulse-dot inline-block" style="animation-delay: .4s"></span>
+          </div>
+        }
+      </div>
+
+      <!-- Correction overlay (chat mode) -->
+      @if (isChat() && correction()) {
+        <div class="absolute bottom-[60px] left-0 right-0 z-10 px-3">
+          <div class="p-4 border border-[var(--accent-border)] bg-bg-1 shadow-xl relative animate-fade-slide">
+            <button
+              type="button"
+              class="absolute top-3 right-3 text-text-lo hover:text-text-hi transition-colors"
+              (click)="dismissCorrection()"
+            >
+              <app-icon name="x" [size]="14" />
+            </button>
+            <div class="font-mono text-[10px] uppercase tracking-[0.12em] text-accent mb-2 flex items-center gap-1.5">
+              <app-icon name="sparkles" [size]="12" />
+              Sugestão do Professor
+            </div>
+            <div class="text-[15px] text-text-hi font-medium mb-1">{{ correction()!.correctedText }}</div>
+            <div class="text-[12.5px] text-text-mid mb-4">{{ correction()!.explanation }}</div>
+            <button type="button" class="btn-primary justify-center py-2 text-[12px] w-full" (click)="applyCorrection()">
+              <app-icon name="check" [size]="12" />
+              Aplicar correção
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- Suggestions row (chat mode) -->
+      @if (isChat() && suggestions().length > 0) {
+        <div class="px-5 py-3 hl-t flex flex-wrap gap-2">
+          @for (s of suggestions(); track s) {
+            <button
+              type="button"
+              class="tag hover:border-[var(--accent-border)] hover:text-accent transition-colors cursor-pointer"
+              (click)="setInput(s)"
+            >
+              {{ s }}
+            </button>
+          }
+        </div>
+      }
+
+      <!-- Input bar -->
+      <div class="p-3 hl-t flex gap-2 bg-bg-1 relative z-20">
+        <input
+          class="input py-3 font-mono text-[13px] flex-1"
+          [placeholder]="isChat() ? 'Escreva uma resposta…' : 'Faça uma pergunta…'"
+          [value]="input()"
+          (input)="input.set($any($event.target).value)"
+          (keydown)="onKeydown($event)"
+        />
+        @if (isChat()) {
+          <button type="button" class="btn-ghost flex-shrink-0" title="Analisar e corrigir frase">
+            <app-icon name="eye" [size]="14" />
+          </button>
+          <button type="button" class="btn-ghost flex-shrink-0" title="Sugerir respostas">
+            <app-icon name="bulb" [size]="14" />
+          </button>
+        }
+        <button type="button" class="btn-primary flex-shrink-0" (click)="send()">
+          <app-icon name="send" [size]="14" />
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Sidebar ── -->
+    <div class="space-y-3">
+
+      @if (isChat()) {
+        <!-- Session info -->
+        <div class="surface p-4">
+          <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-3 flex justify-between items-center">
+            Esta sessão
+            <button type="button" class="text-accent hover:underline text-[11px]">Nova</button>
+          </div>
+          <div class="space-y-3">
+            <div>
+              <label class="text-[12px] text-text-mid mb-1 block">Nível de Conversa</label>
+              <select
+                class="input py-1.5 px-2 text-[12px] font-mono w-full"
+                [value]="chatLevel()"
+                (change)="onLevelChange($event)"
+              >
+                @for (l of CEFR_LEVELS; track l) {
+                  <option [value]="l">{{ l }}</option>
+                }
+              </select>
+            </div>
+            <div class="flex justify-between text-[13px] pt-2 hl-t">
+              <span class="text-text-mid">Mensagens</span>
+              <span class="tabular-nums font-mono text-text-hi">{{ chatMessages().length }}</span>
+            </div>
+            <div class="flex justify-between text-[13px]">
+              <span class="text-text-mid">As suas palavras</span>
+              <span class="tabular-nums font-mono text-text-hi">{{ wordCount() }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tip -->
+        <div class="surface p-4">
+          <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-3">Dica</div>
+          <p class="text-[12.5px] text-text-mid leading-relaxed">
+            Use o ícone <span class="inline-flex items-center gap-1 text-text-hi"><app-icon name="eye" [size]="10" /></span> para analisar e corrigir a sua frase antes de enviar!
+          </p>
+        </div>
+
+      } @else {
+        <!-- Quick topics (teacher mode) -->
+        <div class="surface p-4">
+          <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-3">Temas rápidos</div>
+          <div class="space-y-1">
+            @for (q of QUICK_TOPICS; track q) {
+              <button
+                type="button"
+                class="w-full text-left text-[12.5px] text-text-mid hover:text-text-hi p-2 hover:bg-bg-2 transition-colors"
+                (click)="setInput(q)"
+              >
+                → {{ q }}
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+    </div>
+  </div>
+
+</div>

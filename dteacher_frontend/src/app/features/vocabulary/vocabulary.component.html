@@ -1,0 +1,153 @@
+<div class="animate-fade-slide space-y-8">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div>
+      <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">03 · Vocabulário</div>
+      <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight">
+        {{ words().length }} palavras
+        <span class="font-display italic text-text-mid">estudadas</span>
+      </h1>
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <span class="tag">
+        <app-icon name="flame" [size]="11" />
+        +{{ thisWeek() }} esta semana
+      </span>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="surface p-4 flex flex-col lg:flex-row gap-3">
+    <!-- Add word -->
+    <div class="flex gap-2 flex-1">
+      <input
+        class="input flex-1 py-3"
+        placeholder="Adicionar nova palavra…"
+        [value]="manualWord()"
+        (input)="manualWord.set($any($event.target).value)"
+        (keydown)="onAddKeydown($event)"
+      />
+      <button
+        type="button"
+        class="btn-ghost"
+        [disabled]="adding() || !manualWord().trim()"
+        (click)="addWord()"
+      >
+        @if (adding()) {
+          <svg class="w-[14px] h-[14px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle class="opacity-20" cx="12" cy="12" r="10" stroke-width="2"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+          </svg>
+        } @else {
+          <app-icon name="plus" [size]="14" />
+        }
+        Add
+      </button>
+    </div>
+
+    <!-- Filter + practice -->
+    <div class="flex gap-2">
+      <div class="relative flex-1 lg:w-[220px] lg:flex-none">
+        <input
+          class="input py-3 w-full pr-9"
+          placeholder="Filtrar…"
+          [value]="filter()"
+          (input)="filter.set($any($event.target).value)"
+        />
+        @if (filter()) {
+          <button
+            type="button"
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-text-dim hover:text-text-hi transition-colors"
+            (click)="filter.set('')"
+          >
+            <app-icon name="x" [size]="12" />
+          </button>
+        }
+      </div>
+      <button type="button" class="btn-primary shrink-0">
+        <app-icon name="chat" [size]="14" />
+        Praticar no chat
+      </button>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  @if (filtered().length === 0) {
+    <div class="surface p-10 flex flex-col items-center text-center">
+      <pre class="font-mono text-[11px] leading-[1.4] text-text-dim mb-6 tracking-[0.15em]">·  ·  ·  ·  ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ( )   ·  ·  ·
+·  ·        ·  ·  ·
+·  ·  ·  ·  ·  ·  ·</pre>
+      <div class="mb-4 text-text-lo">
+        <app-icon name="bookmark" [size]="24" />
+      </div>
+      @if (filter()) {
+        <div class="font-display text-[26px] text-text-hi leading-tight mb-2">Sem resultados.</div>
+        <p class="text-text-mid text-[13px] max-w-sm">
+          Nenhuma palavra corresponde a "<span class="text-text-hi">{{ filter() }}</span>".
+        </p>
+      } @else {
+        <div class="font-display text-[26px] text-text-hi leading-tight mb-2">Ainda nenhuma palavra.</div>
+        <p class="text-text-mid text-[13px] max-w-sm">
+          Gere frases ou adicione palavras manualmente para começar o seu vocabulário.
+        </p>
+      }
+    </div>
+  }
+
+  <!-- Word grid -->
+  @if (filtered().length > 0) {
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      @for (item of filtered(); track item.word; let idx = $index) {
+        <div class="surface p-5 hover:border-line-strong transition-colors group">
+
+          <!-- Word + translation -->
+          <div class="flex items-baseline justify-between mb-3 gap-3">
+            <div class="flex items-baseline gap-2 min-w-0 flex-1">
+              <span class="font-mono text-[10px] text-text-dim tabular-nums shrink-0">
+                {{ padIndex(idx) }}
+              </span>
+              <h3
+                class="text-[20px] font-semibold text-text-hi truncate"
+                [title]="item.word"
+              >
+                {{ item.word }}
+              </h3>
+            </div>
+            <span class="font-mono text-[10.5px] text-accent text-right max-w-[55%] leading-relaxed shrink-0">
+              {{ item.translation }}
+            </span>
+          </div>
+
+          <!-- Example sentence -->
+          <div class="border-l-2 border-line pl-3 space-y-1.5">
+            <p class="text-[13px] text-text-mid italic font-display">"{{ item.example }}"</p>
+            @if (item.exampleTranslation) {
+              <p
+                class="text-[12px] text-text-dim blur-sm hover:blur-none transition-all duration-300 cursor-help"
+                title="Ver tradução"
+              >
+                {{ item.exampleTranslation }}
+              </p>
+            }
+          </div>
+
+          <!-- Hover actions -->
+          <div class="flex items-center gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button type="button" class="chip-btn ghost" title="Ouvir pronúncia">
+              <app-icon name="volume" [size]="12" />
+            </button>
+            <button type="button" class="chip-btn ghost">
+              <app-icon name="sparkles" [size]="12" />
+              Praticar
+            </button>
+          </div>
+
+        </div>
+      }
+    </div>
+  }
+
+</div>

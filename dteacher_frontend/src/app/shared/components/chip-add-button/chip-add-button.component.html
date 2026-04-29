@@ -1,0 +1,26 @@
+<button
+  type="button"
+  class="chip-btn"
+  [class.active]="added()"
+  [disabled]="added() || loading()"
+  (click)="onClick()"
+>
+  @if (loading()) {
+    <svg class="animate-spin" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+      <circle class="opacity-20" cx="12" cy="12" r="10" stroke-width="2"/>
+      <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+    </svg>
+    Adicionando…
+  } @else if (added()) {
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 16 4 11"/>
+    </svg>
+    Adicionado
+  } @else {
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+    Adicionar
+  }
+</button>

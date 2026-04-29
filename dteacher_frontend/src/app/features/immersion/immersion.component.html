@@ -1,0 +1,255 @@
+<div class="animate-fade-slide space-y-8">
+
+  <!-- Header -->
+  <div>
+    <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">08 · Imersão (Input Compreensível)</div>
+    <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight max-w-[28ch]">
+      Adquira fluência lendo <span class="font-display italic text-accent">histórias</span> no seu nível.
+    </h1>
+    <p class="text-text-mid text-[14px] mt-3 max-w-[52ch]">
+      Aprenda pelo contexto. A IA gera um texto envolvente perfeitamente calibrado para que você entenda a maior parte e deduza o resto.
+    </p>
+  </div>
+
+  <!-- ── SETUP STATE ── -->
+  @if (!hasStory()) {
+    <div class="surface p-5 sm:p-6 animate-fade-slide">
+
+      <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4">
+        <!-- Topic input -->
+        <div>
+          <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo mb-2 block">
+            O que você quer ler hoje?
+          </label>
+          <input
+            class="input font-mono text-[13px]"
+            placeholder="Um mistério de detetive, Um dia de trabalho, etc (opcional)"
+            [value]="topic()"
+            (input)="onTopicInput($event)"
+            (keydown)="onTopicKeydown($event)"
+          />
+        </div>
+
+        <!-- Level select -->
+        <div>
+          <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo mb-2 block">
+            Seu Nível CEFR
+          </label>
+          <select
+            class="input font-mono text-[13px] py-3 cursor-pointer w-full sm:w-[120px]"
+            [value]="level()"
+            (change)="onLevelChange($event)"
+          >
+            @for (l of CEFR_LEVELS; track l) {
+              <option [value]="l">{{ l }}</option>
+            }
+          </select>
+        </div>
+      </div>
+
+      <!-- Error -->
+      @if (errorMsg()) {
+        <div class="mt-4 text-[13px] text-danger flex items-center gap-2">
+          <app-icon name="alert" [size]="14" />
+          {{ errorMsg() }}
+        </div>
+      }
+
+      <!-- Examples + button -->
+      <div class="pt-5 mt-5 hl-t flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex flex-wrap gap-2 w-full sm:w-auto">
+          <span class="font-mono text-[10.5px] text-text-dim self-center mr-1">Exemplos:</span>
+          @for (t of EXAMPLE_TOPICS; track t) {
+            <button
+              type="button"
+              class="tag hover:border-line-strong hover:text-text-hi transition-colors"
+              (click)="setTopic(t)"
+            >
+              {{ t }}
+            </button>
+          }
+        </div>
+        <button
+          type="button"
+          class="btn-primary w-full sm:w-auto justify-center"
+          [disabled]="loading()"
+          (click)="generate()"
+        >
+          @if (loading()) {
+            <span class="flex gap-1 items-center">
+              <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: 0s"></span>
+              <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: .2s"></span>
+              <span class="w-1.5 h-1.5 bg-accent-ink pulse-dot inline-block" style="animation-delay: .4s"></span>
+              A escrever história…
+            </span>
+          } @else {
+            <app-icon name="book" [size]="14" />
+            Começar Imersão
+          }
+        </button>
+      </div>
+    </div>
+  }
+
+  <!-- ── STORY STATE ── -->
+  @if (hasStory()) {
+    <div class="space-y-10 animate-fade-slide">
+
+      <!-- Story nav bar -->
+      <div class="flex items-center justify-between">
+        <button type="button" class="chip-btn ghost" (click)="newStory()">
+          <app-icon name="arrow" [size]="12" class="rotate-180" />
+          Nova História
+        </button>
+        <div class="flex items-center gap-2">
+          <span class="tag">
+            <app-icon name="book" [size]="12" />
+            Imersão
+          </span>
+          <span class="tag">{{ level() }}</span>
+        </div>
+      </div>
+
+      <!-- Story card -->
+      <div class="surface-2 p-6 sm:p-10 relative">
+
+        <!-- Title -->
+        <h2 class="font-display text-[28px] sm:text-[36px] font-semibold text-text-hi mb-8 leading-tight tracking-tight">
+          {{ storyData()!.title }}
+        </h2>
+
+        <!-- Paragraphs -->
+        <div class="space-y-8">
+          @for (p of storyData()!.paragraphs; track $index; let i = $index) {
+            <div class="group relative">
+
+              <!-- English text -->
+              <p class="text-[18px] sm:text-[20px] text-text-hi leading-relaxed font-medium">
+                {{ p.en }}
+              </p>
+
+              <!-- Portuguese translation (revealed) -->
+              @if (isRevealed(i)) {
+                <div class="mt-3 text-[14.5px] text-text-mid italic border-l-2 border-accent pl-4 animate-fade-slide">
+                  {{ p.pt }}
+                </div>
+              }
+
+              <!-- Hover actions -->
+              <div class="mt-4 flex items-center gap-3 opacity-20 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  type="button"
+                  class="chip-btn ghost text-[10px] !py-1.5 !px-2"
+                  (click)="toggleParAudio(i)"
+                >
+                  @if (isParPlaying(i)) {
+                    <span class="flex items-end gap-[2px] h-[12px]">
+                      <span class="w-[2px] bg-current animate-bounce" style="height:60%;animation-delay:0s"></span>
+                      <span class="w-[2px] bg-current animate-bounce" style="height:100%;animation-delay:.1s"></span>
+                      <span class="w-[2px] bg-current animate-bounce" style="height:50%;animation-delay:.2s"></span>
+                      <span class="w-[2px] bg-current animate-bounce" style="height:80%;animation-delay:.05s"></span>
+                    </span>
+                    A ler…
+                  } @else {
+                    <app-icon name="volume" [size]="12" />
+                    Ouvir parágrafo
+                  }
+                </button>
+
+                <button
+                  type="button"
+                  class="chip-btn ghost text-[10px] !py-1.5 !px-2"
+                  (click)="toggleReveal(i)"
+                >
+                  <app-icon name="eye" [size]="12" />
+                  {{ isRevealed(i) ? 'Esconder tradução' : 'Revelar tradução' }}
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Quiz section -->
+      <div class="surface p-6 sm:p-8">
+
+        <div class="mb-6">
+          <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-text-lo mb-1">Reading Comprehension</div>
+          <h2 class="text-[22px] font-semibold leading-tight">Você compreendeu bem?</h2>
+        </div>
+
+        <div class="space-y-6">
+          @for (q of storyData()!.quiz; track $index; let qIdx = $index) {
+            <div class="space-y-3">
+
+              <!-- Question -->
+              <div class="text-[15px] font-medium text-text-hi flex gap-2">
+                <span class="text-text-dim font-mono tabular-nums">{{ qIdx + 1 }}.</span>
+                {{ q.question }}
+              </div>
+
+              <!-- Options -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                @for (opt of q.options; track opt) {
+                  <button
+                    type="button"
+                    class="text-left px-4 py-3 transition-colors text-[13.5px] border"
+                    [disabled]="showResults()"
+                    [class.border-accent]="optionState(qIdx, opt) === 'correct'"
+                    [class.bg-accent-soft]="optionState(qIdx, opt) === 'correct'"
+                    [class.text-accent]="optionState(qIdx, opt) === 'correct'"
+                    [class.font-semibold]="optionState(qIdx, opt) === 'correct' || optionState(qIdx, opt) === 'selected'"
+                    [style.borderColor]="optionState(qIdx, opt) === 'wrong' ? 'var(--danger)' : ''"
+                    [style.background]="optionState(qIdx, opt) === 'wrong' ? 'rgba(248,113,113,0.05)' : ''"
+                    [style.color]="optionState(qIdx, opt) === 'wrong' ? 'var(--danger)' : ''"
+                    [class.border-line-strong]="optionState(qIdx, opt) === 'selected'"
+                    [class.bg-bg-2]="optionState(qIdx, opt) === 'selected'"
+                    [class.text-text-hi]="optionState(qIdx, opt) === 'selected'"
+                    [class.surface]="optionState(qIdx, opt) === 'default'"
+                    [class.hover:border-line-strong]="optionState(qIdx, opt) === 'default'"
+                    [class.text-text-mid]="optionState(qIdx, opt) === 'default'"
+                    (click)="selectAnswer(qIdx, opt)"
+                  >
+                    {{ opt }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Correct button (before results) -->
+        @if (!showResults()) {
+          <div class="mt-8 pt-6 hl-t flex justify-end">
+            <button
+              type="button"
+              class="btn-primary"
+              [disabled]="!allAnswered()"
+              (click)="correctAnswers()"
+            >
+              <app-icon name="check" [size]="14" />
+              Corrigir Respostas
+            </button>
+          </div>
+        }
+
+        <!-- Score row (after results) -->
+        @if (showResults()) {
+          <div class="mt-8 pt-6 hl-t flex items-center justify-between animate-fade-slide">
+            <div class="text-[14px] text-text-hi">
+              Acertou
+              <strong class="text-accent font-mono text-[16px]"> {{ quizScore() }}</strong>
+              de {{ storyData()!.quiz.length }}!
+            </div>
+            <button type="button" class="btn-ghost" (click)="newStory()">
+              <app-icon name="sparkles" [size]="14" />
+              Gerar outra história
+            </button>
+          </div>
+        }
+      </div>
+
+    </div>
+  }
+
+</div>

@@ -1,7 +1,7 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { tap } from 'rxjs';
+import { finalize, tap } from 'rxjs';
 
 export interface AuthUser {
   id: string;
@@ -52,10 +52,14 @@ export class AuthService {
   }
 
   logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    this._user.set(null);
-    this.router.navigate(['/login']);
+    return this.http.post('/api/auth/logout', {}).pipe(
+      finalize(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        this._user.set(null);
+        this.router.navigate(['/login']);
+      }),
+    );
   }
 
   private loadUser(): AuthUser | null {
