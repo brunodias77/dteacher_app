@@ -1,43 +1,13 @@
-<div class="min-h-screen bg-bg-0">
+<div class="animate-fade-slide space-y-10">
 
-  <!-- Header -->
-  <header class="bg-bg-1 border-b border-line">
-    <div class="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-
-      <!-- Brand -->
-      <div class="flex items-center gap-3">
-        <div class="w-6 h-6 grid grid-cols-2 grid-rows-2 gap-[3px] bg-bg-1">
-          <i class="block bg-accent"></i>
-          <i class="block bg-text-hi"></i>
-          <i class="block bg-text-hi"></i>
-          <i class="block bg-text-hi"></i>
-        </div>
-        <span class="font-mono text-[13px] text-text-mid tracking-tight">dTeacher</span>
-      </div>
-
-      <!-- User info + logout -->
-      <div class="flex items-center gap-5">
-        <div class="flex items-center gap-2">
-          <div class="w-6 h-6 bg-accent flex items-center justify-center">
-            <span class="font-mono text-[10px] font-bold text-accent-ink leading-none">
-              {{ (user()?.name || user()?.email || '?').charAt(0).toUpperCase() }}
-            </span>
-          </div>
-          <span class="text-[13px] text-text-mid">
-            {{ user()?.name || user()?.email }}
-          </span>
-        </div>
-
-        <app-button variant="ghost" size="sm" (click)="logout()">
-          Sair
-        </app-button>
-      </div>
-
-    </div>
-  </header>
-
-  <!-- Main content -->
-  <main class="max-w-6xl mx-auto px-6 py-10">
-  </main>
+  <div>
+    <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">Início</div>
+    <h1 class="text-[38px] font-semibold leading-[1.05] tracking-tight max-w-[28ch]">
+      Olá, <span class="font-display italic text-accent">{{ user()?.name || 'estudante' }}</span>
+    </h1>
+    <p class="text-text-mid text-[14px] mt-3 max-w-[52ch]">
+      Escolha uma actividade no menu lateral para começar a praticar.
+    </p>
+  </div>
 
 </div>

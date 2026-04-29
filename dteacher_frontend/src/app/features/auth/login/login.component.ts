@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/cor
 import { ActivatedRoute, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
+import { PreferenceService } from '../../../core/services/preference.service';
 import { LoginFormComponent, LoginPayload } from './login-form.component';
 
 interface ApiError {
@@ -16,6 +17,7 @@ interface ApiError {
 })
 export class LoginComponent {
   private auth   = inject(AuthService);
+  private prefs  = inject(PreferenceService);
   private router = inject(Router);
   private route  = inject(ActivatedRoute);
 
@@ -31,7 +33,10 @@ export class LoginComponent {
       next: () => {
         this.loading.set(false);
         const returnUrl = this.route.snapshot.queryParams['returnUrl'] as string | undefined;
-        this.router.navigateByUrl(returnUrl ?? '/dashboard');
+        this.prefs.load().subscribe({
+          complete: () => this.router.navigateByUrl(returnUrl ?? '/dashboard'),
+          error:    () => this.router.navigateByUrl(returnUrl ?? '/dashboard'),
+        });
       },
       error: (err: HttpErrorResponse) => {
         this.loading.set(false);
