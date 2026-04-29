@@ -34,8 +34,8 @@ export class ShellComponent {
     { id: 'textStudy',  label: 'Texto',     num: '04', path: '/text-study', icon: 'text' },
     { id: 'tutor',      label: 'Tutor IA',  num: '05', path: '/tutor',      icon: 'brain' },
     { id: 'fillin',     label: 'Completar', num: '06', path: '/fillin',     icon: 'kbd' },
-    { id: 'phonetics',  label: 'Fonética',  num: '07', path: '/phonetics',  icon: 'zap',      disabled: true },
-    { id: 'immersion',  label: 'Imersão',   num: '08', path: '/immersion',  icon: 'book',     disabled: true },
+    { id: 'phonetics',  label: 'Fonética',  num: '07', path: '/phonetics',  icon: 'zap' },
+    { id: 'immersion',  label: 'Imersão',   num: '08', path: '/immersion',  icon: 'book' },
   ];
 
   readonly STREAK_DAYS = [0, 1, 2, 3, 4, 5, 6];

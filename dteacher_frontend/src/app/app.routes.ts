@@ -54,6 +54,16 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/fillin/fillin.component').then(m => m.FillinComponent),
       },
+      {
+        path: 'phonetics',
+        loadComponent: () =>
+          import('./features/phonetics/phonetics.component').then(m => m.PhoneticsComponent),
+      },
+      {
+        path: 'immersion',
+        loadComponent: () =>
+          import('./features/immersion/immersion.component').then(m => m.ImmersionComponent),
+      },
     ],
   },
 ];
