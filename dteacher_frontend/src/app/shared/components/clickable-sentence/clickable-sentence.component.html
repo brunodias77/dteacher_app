@@ -1,0 +1,11 @@
+@for (token of tokens(); track $index) {
+  @if (token.isWord) {
+    <span
+      class="cursor-pointer hover:text-accent hover:underline underline-offset-2 decoration-dashed transition-colors"
+      title="Criar flashcard desta palavra"
+      (click)="onClick(token)"
+    >{{ token.display }}</span>
+  } @else {
+    <span>{{ token.display }}</span>
+  }
+}

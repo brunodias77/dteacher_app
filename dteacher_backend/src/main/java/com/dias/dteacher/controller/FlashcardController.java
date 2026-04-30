@@ -4,12 +4,16 @@ import com.dias.dteacher.usecase.flashcard.create.CreateFlashcardRequest;
 import com.dias.dteacher.usecase.flashcard.create.CreateFlashcardUseCase;
 import com.dias.dteacher.usecase.flashcard.list.ListFlashcardsRequest;
 import com.dias.dteacher.usecase.flashcard.list.ListFlashcardsUseCase;
+import com.dias.dteacher.usecase.flashcard.review.ReviewFlashcardRequest;
+import com.dias.dteacher.usecase.flashcard.review.ReviewFlashcardUseCase;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/flashcards")
@@ -18,6 +22,7 @@ public class FlashcardController {
 
     private final CreateFlashcardUseCase createFlashcardUseCase;
     private final ListFlashcardsUseCase  listFlashcardsUseCase;
+    private final ReviewFlashcardUseCase reviewFlashcardUseCase;
 
     @GetMapping
     public ResponseEntity<?> list(@AuthenticationPrincipal UserDetails userDetails) {
@@ -43,4 +48,18 @@ public class FlashcardController {
                 body2 -> ResponseEntity.status(HttpStatus.CREATED).body(body2)
         );
     }
+
+    @PatchMapping("/{id}/review")
+    public ResponseEntity<?> review(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable UUID id,
+            @RequestBody ReviewBody body) {
+        var request = new ReviewFlashcardRequest(userDetails.getUsername(), id, body.grade());
+        return reviewFlashcardUseCase.execute(request).fold(
+                n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                resp -> ResponseEntity.ok(resp)
+        );
+    }
+
+    record ReviewBody(String grade) {}
 }

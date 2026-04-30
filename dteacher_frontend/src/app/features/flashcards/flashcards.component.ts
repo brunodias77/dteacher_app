@@ -1,54 +1,24 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { IconComponent } from '../../shared/components/icon/icon.component';
-
-export interface Flashcard {
-  id: string;
-  english: string;
-  portuguese: string;
-  nextReview: Date;
-  repetitions: number;
-}
-
-const MOCK_CARDS: Flashcard[] = [
-  {
-    id: '1',
-    english: 'She arrived at the airport three hours before her flight.',
-    portuguese: 'Ela chegou ao aeroporto três horas antes do voo.',
-    nextReview: new Date(Date.now() - 1000),
-    repetitions: 0,
-  },
-  {
-    id: '2',
-    english: 'He bought a round-trip ticket to London.',
-    portuguese: 'Ele comprou uma passagem de ida e volta para Londres.',
-    nextReview: new Date(Date.now() - 1000),
-    repetitions: 0,
-  },
-  {
-    id: '3',
-    english: 'The meeting has been postponed until next week.',
-    portuguese: 'A reunião foi adiada para a próxima semana.',
-    nextReview: new Date(Date.now() + 86_400_000),
-    repetitions: 3,
-  },
-];
+import { FlashcardResponse, FlashcardService, ReviewGrade } from '../../core/services/flashcard.service';
+import { AddFlashcardPayload, FlashcardAddFormComponent } from './flashcard-add-form.component';
 
 interface GradeOption {
-  key: 'again' | 'hard' | 'good' | 'easy';
+  key: ReviewGrade;
   label: string;
   sub: string;
   color: string;
   icon: string;
-  delay: number;
 }
 
 const GRADES: GradeOption[] = [
-  { key: 'again', label: 'Errei',   sub: '<1 min',  color: 'var(--color-danger)', icon: 'rotate', delay: 60_000 },
-  { key: 'hard',  label: 'Difícil', sub: '10 min',  color: 'var(--color-warn)',   icon: 'x',      delay: 600_000 },
-  { key: 'good',  label: 'Bom',     sub: '1 dia',   color: 'var(--color-info)',   icon: 'check',  delay: 86_400_000 },
-  { key: 'easy',  label: 'Fácil',   sub: '4 dias',  color: 'var(--color-accent)', icon: 'zap',    delay: 345_600_000 },
+  { key: 'again', label: 'Errei',   sub: '1 dia',    color: 'var(--color-danger)', icon: 'rotate' },
+  { key: 'hard',  label: 'Difícil', sub: '1+ dias',  color: 'var(--color-warn)',   icon: 'x'      },
+  { key: 'good',  label: 'Bom',     sub: '1-6 dias', color: 'var(--color-info)',   icon: 'check'  },
+  { key: 'easy',  label: 'Fácil',   sub: '4+ dias',  color: 'var(--color-accent)', icon: 'zap'    },
 ];
 
 const SEGMENTS = Array.from({ length: 20 }, (_, i) => i);
@@ -57,28 +27,38 @@ const SEGMENTS = Array.from({ length: 20 }, (_, i) => i);
   selector: 'app-flashcards',
   templateUrl: './flashcards.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, IconComponent, DecimalPipe],
+  imports: [RouterLink, IconComponent, DecimalPipe, FlashcardAddFormComponent],
 })
 export class FlashcardsComponent {
-  readonly cards        = signal<Flashcard[]>(MOCK_CARDS);
-  readonly isFlipped    = signal(false);
-  readonly reviewMode   = signal<'classic' | 'typing'>('classic');
-  readonly userInput    = signal('');
-  readonly hoveredGrade = signal<string | null>(null);
+  private flashcardService = inject(FlashcardService);
+
+  readonly cards          = signal<FlashcardResponse[]>([]);
+  readonly loading        = signal(true);
+  readonly sessionStarted = signal(false);
+  readonly isFlipped      = signal(false);
+  readonly reviewMode     = signal<'classic' | 'typing'>('classic');
+  readonly userInput      = signal('');
+  readonly hoveredGrade   = signal<string | null>(null);
+  readonly gradingKey     = signal<ReviewGrade | null>(null);
+  readonly showAddForm    = signal(false);
+  readonly addLoading     = signal(false);
+  readonly addErrors      = signal<string[]>([]);
 
   readonly GRADES   = GRADES;
   readonly SEGMENTS = SEGMENTS;
 
+  readonly total = computed(() => this.cards().length);
+
   readonly dueCards = computed(() =>
-    this.cards().filter(c => c.nextReview <= new Date()),
+    this.cards().filter(c => new Date(c.nextReview) <= new Date()),
   );
 
   readonly currentCard = computed(() => this.dueCards()[0] ?? null);
 
   readonly progress = computed(() => {
-    const total = this.cards().length;
-    if (total === 0) return 0;
-    return Math.max(5, ((total - this.dueCards().length) / total) * 100);
+    const t = this.total();
+    if (t === 0) return 0;
+    return Math.max(5, ((t - this.dueCards().length) / t) * 100);
   });
 
   readonly isCorrect = computed(() => {
@@ -88,6 +68,16 @@ export class FlashcardsComponent {
     if (ni === this.normalize(card.portuguese)) return true;
     return card.portuguese.split(/,|\/|\bou\b/i).some(p => this.normalize(p) === ni);
   });
+
+  constructor() {
+    this.flashcardService.list().subscribe({
+      next: res => {
+        this.cards.set(res.cards);
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
+  }
 
   isSegOn(i: number): boolean {
     return i < Math.round(this.progress() / 5);
@@ -105,15 +95,21 @@ export class FlashcardsComponent {
 
   grade(g: GradeOption): void {
     const card = this.currentCard();
-    if (!card) return;
-    const nextReview = new Date(Date.now() + g.delay);
-    this.cards.update(list =>
-      list.map(c =>
-        c.id === card.id ? { ...c, nextReview, repetitions: c.repetitions + 1 } : c,
-      ),
-    );
-    this.isFlipped.set(false);
-    this.userInput.set('');
+    if (!card || this.gradingKey() !== null) return;
+
+    this.gradingKey.set(g.key);
+    this.flashcardService.review(card.id, g.key).subscribe({
+      next: updated => {
+        this.cards.update(list => list.map(c => c.id === updated.id ? updated : c));
+        if (this.dueCards().length === 0) {
+          this.sessionStarted.set(false);
+        }
+        this.isFlipped.set(false);
+        this.userInput.set('');
+        this.gradingKey.set(null);
+      },
+      error: () => this.gradingKey.set(null),
+    });
   }
 
   onUserInput(event: Event): void {
@@ -122,6 +118,38 @@ export class FlashcardsComponent {
 
   onInputKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter' && this.userInput().trim()) this.isFlipped.set(true);
+  }
+
+  startSession(): void {
+    this.sessionStarted.set(true);
+    this.isFlipped.set(false);
+    this.userInput.set('');
+  }
+
+  openAddForm(): void {
+    this.addErrors.set([]);
+    this.showAddForm.set(true);
+  }
+
+  onAddSubmit(payload: AddFlashcardPayload): void {
+    this.addLoading.set(true);
+    this.addErrors.set([]);
+    this.flashcardService.add({ ...payload, source: 'manual' }).subscribe({
+      next: card => {
+        this.cards.update(list => [...list, card]);
+        this.addLoading.set(false);
+        this.showAddForm.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        const body = err.error as { errors?: string[] } | undefined;
+        this.addErrors.set(body?.errors ?? ['Erro ao salvar o cartão. Tente novamente.']);
+        this.addLoading.set(false);
+      },
+    });
+  }
+
+  onAddCancel(): void {
+    this.showAddForm.set(false);
   }
 
   private normalize(s: string): string {

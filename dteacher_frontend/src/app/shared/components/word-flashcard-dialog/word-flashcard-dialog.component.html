@@ -1,0 +1,69 @@
+<div
+  class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+  (click)="onCancel()"
+>
+  <div
+    class="surface-2 p-6 max-w-sm w-full"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-accent mb-3">Nova palavra</div>
+    <div class="text-[24px] font-display text-text-hi mb-2">"{{ word() }}"</div>
+    <p class="text-[13px] text-text-mid mb-5">Criar flashcard desta palavra?</p>
+
+    <!-- Loading state -->
+    @if (translating()) {
+      <div class="mb-5 flex items-center gap-3 text-[13px] text-text-mid">
+        <svg class="w-[14px] h-[14px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle class="opacity-20" cx="12" cy="12" r="10" stroke-width="2"/>
+          <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+        </svg>
+        A buscar tradução no Gemini…
+      </div>
+    }
+
+    <!-- Translation error -->
+    @if (!translating() && translateError()) {
+      <div class="mb-5 border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.05)] px-4 py-3">
+        <p class="text-[13px] text-danger">{{ translateError() }}</p>
+      </div>
+    }
+
+    <!-- Translation result -->
+    @if (!translating() && !translateError()) {
+      <div class="mb-5">
+        <label class="font-mono text-[10.5px] uppercase tracking-[0.1em] text-text-lo block mb-1.5">
+          Tradução (pode editar se necessário)
+        </label>
+        <input
+          class="input w-full"
+          [value]="portuguese()"
+          (input)="setPortuguese($any($event.target).value)"
+          (keydown.enter)="onConfirm()"
+          autofocus
+        />
+      </div>
+    }
+
+    <div class="flex gap-2">
+      <button type="button" class="btn-ghost flex-1 justify-center" (click)="onCancel()">
+        Cancelar
+      </button>
+      <button
+        type="button"
+        class="btn-primary flex-1 justify-center"
+        [disabled]="loading() || translating() || !!translateError() || !portuguese().trim()"
+        (click)="onConfirm()"
+      >
+        @if (loading()) {
+          <svg class="w-[14px] h-[14px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle class="opacity-20" cx="12" cy="12" r="10" stroke-width="2"/>
+            <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+          </svg>
+        } @else {
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        }
+        Confirmar
+      </button>
+    </div>
+  </div>
+</div>

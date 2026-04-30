@@ -112,7 +112,7 @@
               </div>
               <div class="flex-1 min-w-0 space-y-2">
                 <div class="text-[20px] leading-snug text-text-hi font-medium">
-                  {{ item.english }}
+                  <app-clickable-sentence [text]="item.english" (wordClicked)="onWordClick($event)" />
                 </div>
                 <span
                   class="text-[13px] text-text-mid blur-sm hover:blur-none transition-all duration-300 cursor-help"
@@ -134,3 +134,12 @@
   </div>
 
 </div>
+
+@if (selectedWord()) {
+  <app-word-flashcard-dialog
+    [word]="selectedWord()!"
+    [loading]="wordAdding()"
+    (confirmed)="onConfirmWordFlashcard($event)"
+    (cancelled)="onCancelWordFlashcard()"
+  />
+}

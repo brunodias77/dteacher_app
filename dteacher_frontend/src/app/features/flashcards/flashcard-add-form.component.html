@@ -1,0 +1,70 @@
+<div
+  class="fixed inset-0 bg-black/80 backdrop-blur-sm z-40 flex items-center justify-center p-4"
+  (click)="cancel()"
+>
+  <div
+    class="surface-2 p-6 w-full max-w-md animate-fade-slide"
+    (click)="$event.stopPropagation()"
+  >
+    <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-accent mb-3">Novo cartão</div>
+    <h2 class="text-[22px] font-semibold text-text-hi mb-1">Adicionar flashcard</h2>
+    <p class="text-[13px] text-text-mid mb-6">Escreva uma palavra ou frase em inglês e a sua tradução.</p>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="space-y-4">
+
+      <app-input
+        id="add-english"
+        formControlName="english"
+        label="Inglês"
+        placeholder="ex: to postpone, round-trip ticket…"
+        [error]="englishError()"
+      />
+
+      <app-input
+        id="add-portuguese"
+        formControlName="portuguese"
+        label="Tradução em português"
+        placeholder="ex: adiar, passagem de ida e volta…"
+        [error]="portugueseError()"
+      />
+
+      @if (apiErrors().length > 0) {
+        <div class="border border-[rgba(248,113,113,0.3)] bg-[rgba(248,113,113,0.05)] px-4 py-3 space-y-1">
+          @for (err of apiErrors(); track err) {
+            <p class="text-[13px] text-danger">{{ err }}</p>
+          }
+        </div>
+      }
+
+      <div class="flex gap-2 pt-1">
+        <button
+          type="button"
+          class="btn-ghost flex-1 justify-center"
+          [disabled]="loading()"
+          (click)="cancel()"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          class="btn-primary flex-1 justify-center"
+          [disabled]="loading()"
+        >
+          @if (loading()) {
+            <svg class="w-[14px] h-[14px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <circle class="opacity-20" cx="12" cy="12" r="10" stroke-width="2"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+            </svg>
+            A salvar…
+          } @else {
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Adicionar
+          }
+        </button>
+      </div>
+
+    </form>
+  </div>
+</div>

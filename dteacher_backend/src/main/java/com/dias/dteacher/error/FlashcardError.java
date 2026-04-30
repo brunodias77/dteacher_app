@@ -9,4 +9,5 @@ public final class FlashcardError {
     public static final Error ENGLISH_REQUIRED    = new Error("Texto em inglês é obrigatório");
     public static final Error PORTUGUESE_REQUIRED = new Error("Tradução em português é obrigatória");
     public static final Error SOURCE_TOO_LONG     = new Error("Fonte deve ter no máximo 30 caracteres");
+    public static final Error INVALID_GRADE       = new Error("Grade inválido. Use: again, hard, good ou easy");
 }

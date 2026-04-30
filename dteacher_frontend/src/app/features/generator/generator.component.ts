@@ -4,12 +4,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { GeneratorService, Sentence } from '../../core/services/generator.service';
 import { FlashcardService } from '../../core/services/flashcard.service';
 import { ChipAddButton } from '../../shared/components/chip-add-button/chip-add-button.component';
+import { ClickableSentenceComponent } from '../../shared/components/clickable-sentence/clickable-sentence.component';
+import { WordFlashcardDialogComponent } from '../../shared/components/word-flashcard-dialog/word-flashcard-dialog.component';
 
 @Component({
   selector: 'app-generator',
   templateUrl: './generator.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, ChipAddButton],
+  imports: [FormsModule, ChipAddButton, ClickableSentenceComponent, WordFlashcardDialogComponent],
 })
 export class GeneratorComponent {
   private generatorService = inject(GeneratorService);
@@ -22,6 +24,9 @@ export class GeneratorComponent {
 
   addingIdx = signal<Set<number>>(new Set());
   addedIdx  = signal<Set<number>>(new Set());
+
+  selectedWord  = signal<string | null>(null);
+  wordAdding    = signal(false);
 
   readonly SUGGESTIONS = ['small talk', 'commute', 'ordering coffee', 'remote work', 'weekend plans'];
 
@@ -73,4 +78,27 @@ export class GeneratorComponent {
   isAdded(idx: number)  { return this.addedIdx().has(idx);  }
 
   padIndex(n: number) { return String(n + 1).padStart(2, '0'); }
+
+  onWordClick(word: string) {
+    this.selectedWord.set(word);
+  }
+
+  onConfirmWordFlashcard(portuguese: string) {
+    const word = this.selectedWord();
+    if (!word) return;
+    this.wordAdding.set(true);
+    this.flashcardService.add({ english: word, portuguese, source: 'generator-word' }).subscribe({
+      next: () => {
+        this.wordAdding.set(false);
+        this.selectedWord.set(null);
+      },
+      error: () => {
+        this.wordAdding.set(false);
+      },
+    });
+  }
+
+  onCancelWordFlashcard() {
+    this.selectedWord.set(null);
+  }
 }
