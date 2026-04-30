@@ -5,6 +5,7 @@ import com.dias.dteacher.error.FlashcardError;
 import com.dias.dteacher.exception.NotFoundException;
 import com.dias.dteacher.model.Flashcard;
 import com.dias.dteacher.repository.FlashcardRepository;
+import com.dias.dteacher.service.StudyLogService;
 import com.dias.dteacher.validation.Notification;
 import io.vavr.control.Either;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class ReviewFlashcardUseCase implements UseCase<ReviewFlashcardRequest, R
     private static final BigDecimal MIN_EASE      = new BigDecimal("1.30");
 
     private final FlashcardRepository flashcardRepository;
+    private final StudyLogService      studyLogService;
 
     @Override
     @Transactional
@@ -41,6 +43,7 @@ public class ReviewFlashcardUseCase implements UseCase<ReviewFlashcardRequest, R
 
         applyGrade(card, request.grade());
         flashcardRepository.save(card);
+        studyLogService.recordCardReview(request.email());
 
         return Either.right(new ReviewFlashcardResponse(
                 card.getId(),

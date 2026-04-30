@@ -6,12 +6,13 @@ import { FlashcardService } from '../../core/services/flashcard.service';
 import { ChipAddButton } from '../../shared/components/chip-add-button/chip-add-button.component';
 import { ClickableSentenceComponent } from '../../shared/components/clickable-sentence/clickable-sentence.component';
 import { WordFlashcardDialogComponent } from '../../shared/components/word-flashcard-dialog/word-flashcard-dialog.component';
+import { AudioPillComponent } from '../../shared/components/audio-pill/audio-pill.component';
 
 @Component({
   selector: 'app-generator',
   templateUrl: './generator.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, ChipAddButton, ClickableSentenceComponent, WordFlashcardDialogComponent],
+  imports: [FormsModule, ChipAddButton, ClickableSentenceComponent, WordFlashcardDialogComponent, AudioPillComponent],
 })
 export class GeneratorComponent {
   private generatorService = inject(GeneratorService);
