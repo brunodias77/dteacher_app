@@ -25,7 +25,7 @@
         class="input flex-1 py-3"
         placeholder="Adicionar nova palavra…"
         [value]="manualWord()"
-        (input)="manualWord.set($any($event.target).value)"
+        (input)="onManualWordInput($event)"
         (keydown)="onAddKeydown($event)"
       />
       <button
@@ -53,7 +53,7 @@
           class="input py-3 w-full pr-9"
           placeholder="Filtrar…"
           [value]="filter()"
-          (input)="filter.set($any($event.target).value)"
+          (input)="onFilterChange($event)"
         />
         @if (filter()) {
           <button

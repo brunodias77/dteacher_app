@@ -60,10 +60,11 @@ const SEGMENTS = Array.from({ length: 20 }, (_, i) => i);
   imports: [RouterLink, IconComponent, DecimalPipe],
 })
 export class FlashcardsComponent {
-  readonly cards      = signal<Flashcard[]>(MOCK_CARDS);
-  readonly isFlipped  = signal(false);
-  readonly reviewMode = signal<'classic' | 'typing'>('classic');
-  readonly userInput  = signal('');
+  readonly cards        = signal<Flashcard[]>(MOCK_CARDS);
+  readonly isFlipped    = signal(false);
+  readonly reviewMode   = signal<'classic' | 'typing'>('classic');
+  readonly userInput    = signal('');
+  readonly hoveredGrade = signal<string | null>(null);
 
   readonly GRADES   = GRADES;
   readonly SEGMENTS = SEGMENTS;
@@ -113,6 +114,10 @@ export class FlashcardsComponent {
     );
     this.isFlipped.set(false);
     this.userInput.set('');
+  }
+
+  onUserInput(event: Event): void {
+    this.userInput.set((event.target as HTMLInputElement).value);
   }
 
   onInputKeydown(event: KeyboardEvent): void {

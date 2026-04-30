@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterOutlet } from '@angular/router';
 import { AuthService } from './core/services/auth.service';
 import { PreferenceService } from './core/services/preference.service';
@@ -16,7 +17,7 @@ export class App {
 
   constructor() {
     if (this.auth.isAuthenticated()) {
-      this.prefs.load().subscribe();
+      this.prefs.load().pipe(takeUntilDestroyed()).subscribe();
     }
   }
 }

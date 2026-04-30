@@ -229,6 +229,48 @@ Content-Type: application/json
 
 ## Flashcards
 
+### GET /api/flashcards
+
+Retorna todos os flashcards do deck do usuário autenticado, ordenados por `nextReview` crescente (mais urgentes primeiro), com contagem de pendentes.
+
+**Request**
+```
+GET http://localhost:8080/api/flashcards
+Authorization: Bearer <token>
+```
+
+**Respostas**
+
+| Status | Situação |
+|--------|----------|
+| 200 | Lista retornada — body contém `cards`, `total` e `totalDue` |
+| 403 | Token ausente ou inválido |
+
+**Exemplo de resposta 200**
+```json
+{
+  "cards": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "english": "The flight was delayed by two hours.",
+      "portuguese": "O voo atrasou duas horas.",
+      "source": "generator",
+      "nextReview": "2025-04-28T10:00:00Z",
+      "intervalDays": 0,
+      "easeFactor": 2.50,
+      "repetitions": 0,
+      "createdAt": "2025-04-27T09:00:00Z"
+    }
+  ],
+  "total": 5,
+  "totalDue": 2
+}
+```
+
+> `totalDue` conta os cartões com `nextReview ≤ now` — são os que o algoritmo SRS já considera prontos para revisão.
+
+---
+
 ### POST /api/flashcards
 
 Adiciona um par inglês/português ao deck do usuário autenticado com valores SRS padrão.

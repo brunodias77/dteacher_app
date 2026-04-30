@@ -1,28 +1,27 @@
 package com.dias.dteacher.service;
 
+import com.dias.dteacher.exception.BadGatewayException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.genai.Client;
+import com.google.genai.types.GenerateContentResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
+@Slf4j
 @Service
 public class GeminiService {
-
-    private static final String BASE_URL =
-            "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s";
 
     @Value("${gemini.api-key}")
     private String apiKey;
 
-    @Value("${gemini.model:gemini-2.5-flash-preview-09-2025}")
+    @Value("${gemini.model:gemini-2.0-flash}")
     private String model;
 
-    private final RestClient   restClient   = RestClient.create();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public record SentencePair(String english, String portuguese) {}
@@ -32,46 +31,29 @@ public class GeminiService {
                 Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
                 Gere até 5 frases naturais em inglês utilizando as seguintes palavras ou expressões: %s.
                 As frases devem ser úteis para o dia a dia.
+                Responda SOMENTE com um array JSON no formato:
+                [{"english": "...", "portuguese": "..."}]
                 """.formatted(words.strip());
 
-        Map<String, Object> requestBody = Map.of(
-                "contents", List.of(Map.of("parts", List.of(Map.of("text", prompt)))),
-                "generationConfig", Map.of(
-                        "responseMimeType", "application/json",
-                        "responseSchema", Map.of(
-                                "type", "ARRAY",
-                                "items", Map.of(
-                                        "type", "OBJECT",
-                                        "properties", Map.of(
-                                                "english",    Map.of("type", "STRING"),
-                                                "portuguese", Map.of("type", "STRING")
-                                        ),
-                                        "required", List.of("english", "portuguese")
-                                )
-                        )
-                )
-        );
-
-        String url = BASE_URL.formatted(model, apiKey);
-
-        String responseBody = restClient.post()
-                .uri(url)
-                .header("Content-Type", "application/json")
-                .body(requestBody)
-                .retrieve()
-                .body(String.class);
-
-        return parseSentences(responseBody);
+        try {
+            Client client = Client.builder().apiKey(apiKey).build();
+            GenerateContentResponse response = client.models.generateContent(model, prompt, null);
+            return parseSentences(response.text());
+        } catch (BadGatewayException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Gemini API error: {}", e.getMessage(), e);
+            throw new BadGatewayException("Serviço de IA temporariamente indisponível. Tente novamente mais tarde.", e);
+        }
     }
 
-    private List<SentencePair> parseSentences(String responseBody) {
+    private List<SentencePair> parseSentences(String text) {
         try {
-            JsonNode root = objectMapper.readTree(responseBody);
-            String text = root.path("candidates").get(0)
-                    .path("content").path("parts").get(0)
-                    .path("text").asText();
-
-            JsonNode sentences = objectMapper.readTree(text);
+            String json = text.strip();
+            if (json.startsWith("```")) {
+                json = json.replaceAll("```(?:json)?\\s*", "").replaceAll("```\\s*$", "").strip();
+            }
+            JsonNode sentences = objectMapper.readTree(json);
             List<SentencePair> result = new ArrayList<>();
             for (JsonNode node : sentences) {
                 result.add(new SentencePair(

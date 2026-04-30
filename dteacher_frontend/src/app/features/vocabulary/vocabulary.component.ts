@@ -85,6 +85,14 @@ export class VocabularyComponent {
     this.manualWord.set('');
   }
 
+  onManualWordInput(event: Event): void {
+    this.manualWord.set((event.target as HTMLInputElement).value);
+  }
+
+  onFilterChange(event: Event): void {
+    this.filter.set((event.target as HTMLInputElement).value);
+  }
+
   onAddKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter') this.addWord();
   }

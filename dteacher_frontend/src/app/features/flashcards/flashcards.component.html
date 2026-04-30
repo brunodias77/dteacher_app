@@ -143,7 +143,7 @@
                 class="input text-center"
                 placeholder="Escreva a tradução…"
                 [value]="userInput()"
-                (input)="userInput.set($any($event.target).value)"
+                (input)="onUserInput($event)"
                 (keydown)="onInputKeydown($event)"
               />
             </div>
@@ -201,9 +201,9 @@
               <button
                 type="button"
                 class="surface-2 py-4 flex flex-col items-center gap-1 transition-colors group"
-                style="border-color: var(--color-line)"
-                (mouseenter)="$any($event.currentTarget).style.borderColor = g.color"
-                (mouseleave)="$any($event.currentTarget).style.borderColor = 'var(--color-line)'"
+                [style.borderColor]="hoveredGrade() === g.key ? g.color : ''"
+                (mouseenter)="hoveredGrade.set(g.key)"
+                (mouseleave)="hoveredGrade.set(null)"
                 (click)="grade(g)"
               >
                 <div [style.color]="g.color" class="transition-transform group-hover:scale-110">

@@ -6,10 +6,8 @@ import com.dias.dteacher.service.GeminiService;
 import com.dias.dteacher.validation.Notification;
 import io.vavr.control.Either;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class GenerateSentencesUseCase implements UseCase<GenerateSentencesRequest, GenerateSentencesResponse> {
@@ -31,16 +29,10 @@ public class GenerateSentencesUseCase implements UseCase<GenerateSentencesReques
             return Either.left(notification);
         }
 
-        try {
-            var pairs = geminiService.generateSentences(request.words());
-            var sentences = pairs.stream()
-                    .map(p -> new GenerateSentencesResponse.Sentence(p.english(), p.portuguese()))
-                    .toList();
-            return Either.right(new GenerateSentencesResponse(sentences));
-        } catch (Exception e) {
-            log.error("Gemini error for words='{}': {}", request.words(), e.getMessage());
-            notification.append(GeneratorError.GEMINI_UNAVAILABLE);
-            return Either.left(notification);
-        }
+        var pairs = geminiService.generateSentences(request.words());
+        var sentences = pairs.stream()
+                .map(p -> new GenerateSentencesResponse.Sentence(p.english(), p.portuguese()))
+                .toList();
+        return Either.right(new GenerateSentencesResponse(sentences));
     }
 }

@@ -1,5 +1,6 @@
 package com.dias.dteacher.middlewares;
 
+import com.dias.dteacher.exception.BadGatewayException;
 import com.dias.dteacher.exception.ConflictException;
 import com.dias.dteacher.exception.DomainException;
 import com.dias.dteacher.exception.NotFoundException;
@@ -41,6 +42,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<Map<String, Object>> handleUnauthorizedException(UnauthorizedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(errors(List.of(ex.getMessage())));
+    }
+
+    @ExceptionHandler(BadGatewayException.class)
+    public ResponseEntity<Map<String, Object>> handleBadGatewayException(BadGatewayException ex) {
+        log.error("Serviço externo indisponível: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(errors(List.of(ex.getMessage())));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

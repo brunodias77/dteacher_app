@@ -100,9 +100,6 @@ export class TutorComponent {
   readonly QUICK_TOPICS = QUICK_TOPICS;
 
   readonly isChat = computed(() => this.mode() === 'chat');
-  readonly messages = computed(() =>
-    this.isChat() ? this.chatMessages() : this.teacherMessages(),
-  );
 
   readonly wordCount = computed(() =>
     this.chatMessages()
@@ -135,6 +132,10 @@ export class TutorComponent {
   send(): void {
     if (!this.input().trim()) return;
     this.input.set('');
+  }
+
+  onInputChange(event: Event): void {
+    this.input.set((event.target as HTMLInputElement).value);
   }
 
   onKeydown(event: KeyboardEvent): void {

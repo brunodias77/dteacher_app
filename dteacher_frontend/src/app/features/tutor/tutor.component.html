@@ -96,16 +96,51 @@
           </div>
         }
 
-        <!-- Message list -->
-        @for (msg of messages(); track $index; let i = $index) {
-          <div
-            class="flex gap-3"
-            [class.justify-end]="msg.sender === 'USER' && isChat()"
-            [class.flex-row-reverse]="msg.sender === 'USER' && !isChat()"
-            [class.justify-start]="msg.sender === 'AI'"
-          >
-            <!-- Teacher mode avatars -->
-            @if (!isChat()) {
+        <!-- Message list: chat mode -->
+        @if (isChat()) {
+          @for (msg of chatMessages(); track $index) {
+            <div class="flex gap-3" [class.justify-end]="msg.sender === 'USER'">
+              <div class="max-w-[80%]" [class.text-right]="msg.sender === 'USER'">
+                <!-- Bubble -->
+                <div
+                  class="text-[14px] leading-relaxed inline-block px-4 py-3"
+                  [class.bg-accent]="msg.sender === 'USER'"
+                  [class.text-accent-ink]="msg.sender === 'USER'"
+                  [class.surface-2]="msg.sender === 'AI'"
+                >
+                  {{ msg.text }}
+                </div>
+
+                <!-- Translation (AI only) -->
+                @if (msg.sender === 'AI' && msg.translation) {
+                  <div
+                    class="text-[11px] text-text-dim mt-1 font-mono blur-sm hover:blur-none transition-all duration-300 cursor-help"
+                    title="Ver tradução"
+                  >
+                    {{ msg.translation }}
+                  </div>
+                }
+
+                <!-- Feedback (USER only) -->
+                @if (msg.sender === 'USER' && msg.feedback) {
+                  <div class="mt-2 p-3 border border-[var(--accent-border)] bg-[var(--accent-soft)] text-left max-w-[90%]">
+                    <div class="font-mono text-[10px] uppercase tracking-[0.1em] text-accent mb-1 flex items-center gap-1">
+                      <app-icon name="bulb" [size]="10" />
+                      Feedback do professor
+                    </div>
+                    <div class="text-[12.5px] text-text-mid">{{ msg.feedback }}</div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+
+        <!-- Message list: teacher mode -->
+        @if (!isChat()) {
+          @for (msg of teacherMessages(); track $index) {
+            <div class="flex gap-3" [class.flex-row-reverse]="msg.sender === 'USER'">
+              <!-- Avatar -->
               <div
                 class="w-7 h-7 flex items-center justify-center flex-shrink-0 font-mono text-[11px] font-bold"
                 [class.bg-bg-2]="msg.sender === 'USER'"
@@ -115,49 +150,22 @@
               >
                 {{ msg.sender === 'USER' ? 'V' : 'P' }}
               </div>
-            }
 
-            <div class="max-w-[80%]" [class.text-right]="msg.sender === 'USER'">
-              <!-- Bubble -->
-              <div
-                class="text-[14px] leading-relaxed"
-                [class.inline-block]="isChat()"
-                [class.px-4]="isChat()"
-                [class.py-3]="isChat()"
-                [class.p-4]="!isChat()"
-                [class.bg-accent]="msg.sender === 'USER' && isChat()"
-                [class.text-accent-ink]="msg.sender === 'USER' && isChat()"
-                [class.surface-2]="(msg.sender === 'USER' && !isChat()) || (msg.sender === 'AI' && isChat())"
-                [class.text-left]="msg.sender === 'USER' && !isChat()"
-                [class.bg-bg-2]="msg.sender === 'AI' && !isChat()"
-                [class.border]="msg.sender === 'AI' && !isChat()"
-                [class.border-line]="msg.sender === 'AI' && !isChat()"
-              >
-                {{ msg.text }}
-              </div>
-
-              <!-- Translation (chat AI) -->
-              @if (isChat() && msg.sender === 'AI' && $any(msg).translation) {
+              <div class="max-w-[80%]">
+                <!-- Bubble -->
                 <div
-                  class="text-[11px] text-text-dim mt-1 font-mono blur-sm hover:blur-none transition-all duration-300 cursor-help"
-                  title="Ver tradução"
+                  class="text-[14px] leading-relaxed p-4"
+                  [class.surface-2]="msg.sender === 'USER'"
+                  [class.text-left]="msg.sender === 'USER'"
+                  [class.bg-bg-2]="msg.sender === 'AI'"
+                  [class.border]="msg.sender === 'AI'"
+                  [class.border-line]="msg.sender === 'AI'"
                 >
-                  {{ $any(msg).translation }}
+                  {{ msg.text }}
                 </div>
-              }
-
-              <!-- Feedback (chat USER) -->
-              @if (isChat() && msg.sender === 'USER' && $any(msg).feedback) {
-                <div class="mt-2 p-3 border border-[var(--accent-border)] bg-[var(--accent-soft)] text-left max-w-[90%]">
-                  <div class="font-mono text-[10px] uppercase tracking-[0.1em] text-accent mb-1 flex items-center gap-1">
-                    <app-icon name="bulb" [size]="10" />
-                    Feedback do professor
-                  </div>
-                  <div class="text-[12.5px] text-text-mid">{{ $any(msg).feedback }}</div>
-                </div>
-              }
+              </div>
             </div>
-          </div>
+          }
         }
 
         <!-- Typing indicator -->
@@ -171,7 +179,7 @@
       </div>
 
       <!-- Correction overlay (chat mode) -->
-      @if (isChat() && correction()) {
+      @if (isChat() && correction(); as c) {
         <div class="absolute bottom-[60px] left-0 right-0 z-10 px-3">
           <div class="p-4 border border-[var(--accent-border)] bg-bg-1 shadow-xl relative animate-fade-slide">
             <button
@@ -185,8 +193,8 @@
               <app-icon name="sparkles" [size]="12" />
               Sugestão do Professor
             </div>
-            <div class="text-[15px] text-text-hi font-medium mb-1">{{ correction()!.correctedText }}</div>
-            <div class="text-[12.5px] text-text-mid mb-4">{{ correction()!.explanation }}</div>
+            <div class="text-[15px] text-text-hi font-medium mb-1">{{ c.correctedText }}</div>
+            <div class="text-[12.5px] text-text-mid mb-4">{{ c.explanation }}</div>
             <button type="button" class="btn-primary justify-center py-2 text-[12px] w-full" (click)="applyCorrection()">
               <app-icon name="check" [size]="12" />
               Aplicar correção
@@ -216,7 +224,7 @@
           class="input py-3 font-mono text-[13px] flex-1"
           [placeholder]="isChat() ? 'Escreva uma resposta…' : 'Faça uma pergunta…'"
           [value]="input()"
-          (input)="input.set($any($event.target).value)"
+          (input)="onInputChange($event)"
           (keydown)="onKeydown($event)"
         />
         @if (isChat()) {

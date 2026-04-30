@@ -18,7 +18,7 @@
       placeholder="Cole o seu texto em inglês aqui…"
       rows="5"
       [value]="textInput()"
-      (input)="textInput.set($any($event.target).value)"
+      (input)="onTextInput($event)"
       (keydown)="onKeydown($event)"
     ></textarea>
 

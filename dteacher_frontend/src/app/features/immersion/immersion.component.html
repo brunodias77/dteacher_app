@@ -92,7 +92,7 @@
   }
 
   <!-- ── STORY STATE ── -->
-  @if (hasStory()) {
+  @if (storyData(); as s) {
     <div class="space-y-10 animate-fade-slide">
 
       <!-- Story nav bar -->
@@ -115,12 +115,12 @@
 
         <!-- Title -->
         <h2 class="font-display text-[28px] sm:text-[36px] font-semibold text-text-hi mb-8 leading-tight tracking-tight">
-          {{ storyData()!.title }}
+          {{ s.title }}
         </h2>
 
         <!-- Paragraphs -->
         <div class="space-y-8">
-          @for (p of storyData()!.paragraphs; track $index; let i = $index) {
+          @for (p of s.paragraphs; track $index; let i = $index) {
             <div class="group relative">
 
               <!-- English text -->
@@ -179,7 +179,7 @@
         </div>
 
         <div class="space-y-6">
-          @for (q of storyData()!.quiz; track $index; let qIdx = $index) {
+          @for (q of s.quiz; track $index; let qIdx = $index) {
             <div class="space-y-3">
 
               <!-- Question -->
@@ -239,7 +239,7 @@
             <div class="text-[14px] text-text-hi">
               Acertou
               <strong class="text-accent font-mono text-[16px]"> {{ quizScore() }}</strong>
-              de {{ storyData()!.quiz.length }}!
+              de {{ s.quiz.length }}!
             </div>
             <button type="button" class="btn-ghost" (click)="newStory()">
               <app-icon name="sparkles" [size]="14" />

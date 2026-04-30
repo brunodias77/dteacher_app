@@ -1,6 +1,8 @@
 spring:
   application:
     name: dteacher_backend
+  config:
+    import: "optional:file:.env[.properties]"
   datasource:
     url: jdbc:postgresql://localhost:5437/dteacher_db
     username: postgres
@@ -40,4 +42,4 @@ jwt:
 
 gemini:
   api-key: ${GEMINI_API_KEY:}
-  model: ${GEMINI_MODEL:gemini-3-flash-preview}
+  model: ${GEMINI_MODEL:gemini-2.0-flash}

@@ -106,6 +106,10 @@ export class TextStudyComponent {
     this.errorMsg.set('');
   }
 
+  onTextInput(event: Event): void {
+    this.textInput.set((event.target as HTMLTextAreaElement).value);
+  }
+
   onKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') this.analyse();
   }
