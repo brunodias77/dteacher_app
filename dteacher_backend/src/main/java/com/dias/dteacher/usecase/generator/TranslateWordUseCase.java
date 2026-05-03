@@ -2,7 +2,7 @@ package com.dias.dteacher.usecase.generator;
 
 import com.dias.dteacher.contract.UseCase;
 import com.dias.dteacher.error.GeneratorError;
-import com.dias.dteacher.service.GeminiService;
+import com.dias.dteacher.service.OllamaService;
 import com.dias.dteacher.validation.Notification;
 import io.vavr.control.Either;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +14,7 @@ public class TranslateWordUseCase implements UseCase<TranslateWordRequest, Trans
 
     private static final int WORD_MAX = 100;
 
-    private final GeminiService geminiService;
+    private final OllamaService ollamaService;
 
     @Override
     public Either<Notification, TranslateWordResponse> execute(TranslateWordRequest request) {
@@ -29,7 +29,7 @@ public class TranslateWordUseCase implements UseCase<TranslateWordRequest, Trans
             return Either.left(notification);
         }
 
-        var portuguese = geminiService.translateWord(request.word());
+        var portuguese = ollamaService.translateWord(request.word());
         return Either.right(new TranslateWordResponse(portuguese));
     }
 }

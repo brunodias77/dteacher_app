@@ -2,7 +2,7 @@ package com.dias.dteacher.usecase.generator;
 
 import com.dias.dteacher.contract.UseCase;
 import com.dias.dteacher.error.GeneratorError;
-import com.dias.dteacher.service.GeminiService;
+import com.dias.dteacher.service.OllamaService;
 import com.dias.dteacher.validation.Notification;
 import io.vavr.control.Either;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +14,7 @@ public class GenerateSentencesUseCase implements UseCase<GenerateSentencesReques
 
     private static final int WORDS_MAX = 200;
 
-    private final GeminiService geminiService;
+    private final OllamaService ollamaService;
 
     @Override
     public Either<Notification, GenerateSentencesResponse> execute(GenerateSentencesRequest request) {
@@ -29,7 +29,7 @@ public class GenerateSentencesUseCase implements UseCase<GenerateSentencesReques
             return Either.left(notification);
         }
 
-        var pairs = geminiService.generateSentences(request.words());
+        var pairs = ollamaService.generateSentences(request.words());
         var sentences = pairs.stream()
                 .map(p -> new GenerateSentencesResponse.Sentence(p.english(), p.portuguese()))
                 .toList();
