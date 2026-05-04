@@ -23,6 +23,27 @@ public class StudyLogService {
     private final StudyStreakRepository   studyStreakRepository;
 
     @Transactional
+    public void recordWordAdded(String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> NotFoundException.of("User", email));
+
+        LocalDate today = LocalDate.now();
+
+        DailyStudyLogId logId = new DailyStudyLogId(user.getId(), today);
+        DailyStudyLog log = dailyStudyLogRepository.findById(logId)
+                .orElseGet(() -> DailyStudyLog.builder()
+                        .id(logId)
+                        .user(user)
+                        .cardsReviewed(0)
+                        .wordsAdded(0)
+                        .build());
+        log.setWordsAdded(log.getWordsAdded() + 1);
+        dailyStudyLogRepository.save(log);
+
+        updateStreak(user, today);
+    }
+
+    @Transactional
     public void recordCardReview(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> NotFoundException.of("User", email));

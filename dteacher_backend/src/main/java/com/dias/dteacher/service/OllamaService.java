@@ -28,6 +28,8 @@ public class OllamaService {
 
     public record SentencePair(String english, String portuguese) {}
 
+    public record WordEnrichment(String word, String translation, String example, String exampleTranslation) {}
+
     public List<SentencePair> generateSentences(String words) {
         String prompt = """
                 Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
@@ -38,6 +40,21 @@ public class OllamaService {
                 """.formatted(words.strip());
 
         return parseSentences(generate(prompt, 0.4f));
+    }
+
+    public WordEnrichment enrichWord(String word) {
+        String prompt = """
+                Você é um professor de inglês para brasileiros adultos.
+                Para a palavra ou expressão em inglês "%s", retorne um JSON com exatamente estes campos:
+                - word: a própria palavra ou expressão como foi enviada
+                - translation: tradução direta e natural em português brasileiro
+                - example: uma frase de exemplo curta e natural em inglês usando a palavra
+                - exampleTranslation: tradução em português da frase de exemplo
+                Responda SOMENTE com o JSON, sem texto adicional.
+                Exemplo de formato: {"word":"...","translation":"...","example":"...","exampleTranslation":"..."}
+                """.formatted(word.strip());
+
+        return parseWordEnrichment(generate(prompt, 0.2f));
     }
 
     public String translateWord(String word) {
@@ -82,6 +99,24 @@ public class OllamaService {
         } catch (Exception e) {
             log.error("Ollama API error: {}", e.getMessage(), e);
             throw new BadGatewayException("Serviço de IA temporariamente indisponível. Tente novamente mais tarde.", e);
+        }
+    }
+
+    private WordEnrichment parseWordEnrichment(String text) {
+        try {
+            if (text == null || text.isBlank()) {
+                throw new IllegalStateException("Resposta vazia do modelo");
+            }
+            String json = stripMarkdown(text);
+            JsonNode node = objectMapper.readTree(json);
+            return new WordEnrichment(
+                    node.path("word").asText(),
+                    node.path("translation").asText(),
+                    node.path("example").asText(null),
+                    node.path("exampleTranslation").asText(null)
+            );
+        } catch (Exception e) {
+            throw new IllegalStateException("Falha ao processar enriquecimento da palavra", e);
         }
     }
 

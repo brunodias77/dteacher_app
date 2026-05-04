@@ -323,6 +323,64 @@ Content-Type: application/json
 
 ---
 
+### PATCH /api/flashcards/:id/review
+
+Avalia um flashcard aplicando o algoritmo SRS: recalcula `intervalDays`, `easeFactor`, `repetitions` e `nextReview` com base no grau informado. Registra a revisão no log diário de estudo.
+
+**Request**
+```
+PATCH http://localhost:8080/api/flashcards/{id}/review
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "grade": "good"
+}
+```
+
+**Valores aceitos para `grade`**
+
+| Valor | Comportamento |
+|-------|--------------|
+| `again` | Reinicia repetições; próxima revisão em 1 dia |
+| `hard` | Aumenta intervalo ×1.2; reduz `easeFactor` em 0.15 |
+| `good` | Intervalo padrão SRS (1 d → 6 d → `interval × easeFactor`) |
+| `easy` | Intervalo estendido ×1.3; aumenta `easeFactor` em 0.15 |
+
+**Respostas**
+
+| Status | Situação |
+|--------|----------|
+| 200 | Flashcard atualizado — body contém o registro completo com novos valores SRS |
+| 404 | Flashcard não encontrado ou não pertence ao usuário |
+| 422 | `grade` inválido ou ausente |
+| 403 | Token ausente ou inválido |
+
+**Exemplo de resposta 200**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "english": "The flight was delayed by two hours.",
+  "portuguese": "O voo atrasou duas horas.",
+  "source": "generator",
+  "nextReview": "2025-05-04T12:00:00Z",
+  "intervalDays": 1,
+  "easeFactor": 2.50,
+  "repetitions": 1,
+  "createdAt": "2025-04-28T12:00:00Z"
+}
+```
+
+**Casos de erro para testar**
+
+- `grade` ausente ou `null` → `422` com `"Grade inválido"`
+- `grade` com valor fora do conjunto → `422` com `"Grade inválido"`
+- `id` de flashcard de outro usuário → `404`
+
+---
+
 ## Generator
 
 ### POST /api/generator/sentences
@@ -375,6 +433,49 @@ Content-Type: application/json
 - Gemini indisponível ou chave inválida → `422` com `"Serviço de IA temporariamente indisponível"`
 
 > Requer a variável de ambiente `GEMINI_API_KEY` configurada no backend.
+
+---
+
+### POST /api/generator/translate
+
+Traduz uma única palavra ou expressão em inglês para português usando Ollama (modelo local).
+
+**Request**
+```
+POST http://localhost:8080/api/generator/translate
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "word": "serendipity"
+}
+```
+
+> `word` aceita até 100 caracteres. Pode ser uma palavra isolada ou expressão curta.
+
+**Respostas**
+
+| Status | Situação |
+|--------|----------|
+| 200 | Tradução retornada |
+| 422 | Erros de validação |
+| 403 | Token ausente ou inválido |
+
+**Exemplo de resposta 200**
+```json
+{
+  "portuguese": "serendipidade"
+}
+```
+
+**Casos de erro para testar**
+
+- `word` vazio ou `null` → `422` com `"Palavra é obrigatória"`
+- `word` com mais de 100 caracteres → `422` com `"Palavra é muito longa"`
+
+> Requer Ollama rodando localmente. Diferente dos outros endpoints de IA, não usa Gemini.
 
 ---
 
