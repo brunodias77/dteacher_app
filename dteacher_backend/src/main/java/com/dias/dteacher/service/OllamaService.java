@@ -33,8 +33,8 @@ public class OllamaService {
                 Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
                 Gere exatamente 4 frases naturais em inglês utilizando as seguintes palavras ou expressões: %s.
                 As frases devem ser úteis para o dia a dia.
-                Responda SOMENTE com um array JSON no formato:
-                [{"english": "...", "portuguese": "..."}]
+                Responda SOMENTE com um objeto JSON no formato:
+                {"sentences": [{"english": "...", "portuguese": "..."}, {"english": "...", "portuguese": "..."}, {"english": "...", "portuguese": "..."}, {"english": "...", "portuguese": "..."}]}
                 """.formatted(words.strip());
 
         return parseSentences(generate(prompt, 0.4f));
