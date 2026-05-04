@@ -31,7 +31,7 @@ public class OllamaService {
     public List<SentencePair> generateSentences(String words) {
         String prompt = """
                 Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
-                Gere até 5 frases naturais em inglês utilizando as seguintes palavras ou expressões: %s.
+                Gere exatamente 4 frases naturais em inglês utilizando as seguintes palavras ou expressões: %s.
                 As frases devem ser úteis para o dia a dia.
                 Responda SOMENTE com um array JSON no formato:
                 [{"english": "...", "portuguese": "..."}]
@@ -61,18 +61,22 @@ public class OllamaService {
         );
 
         try {
-            JsonNode response = restClient.post()
+            String raw = restClient.post()
                     .uri(baseUrl + "/api/generate")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .body(String.class);
+
+            JsonNode response = objectMapper.readTree(raw);
 
             if (response == null || !response.path("done").asBoolean()) {
                 throw new BadGatewayException("Serviço de IA retornou resposta inválida.");
             }
 
-            return response.path("response").asText();
+            String text = response.path("response").asText();
+            log.debug("Ollama raw response: {}", text);
+            return text;
         } catch (BadGatewayException e) {
             throw e;
         } catch (Exception e) {
@@ -100,13 +104,30 @@ public class OllamaService {
                 throw new IllegalStateException("Resposta vazia do modelo");
             }
             String json = stripMarkdown(text);
-            JsonNode sentences = objectMapper.readTree(json);
+            log.debug("Parsing sentences JSON: {}", json);
+            JsonNode root = objectMapper.readTree(json);
+
+            // resolve to an array node regardless of what the model returned:
+            // - bare array:              [{"english":...}, ...]
+            // - single object:           {"english":..., "portuguese":...}
+            // - wrapped {"sentences":[]} or {"sentences":{}}
+            JsonNode arrayNode;
+            if (root.isArray()) {
+                arrayNode = root;
+            } else if (root.has("english")) {
+                arrayNode = objectMapper.createArrayNode().add(root);
+            } else {
+                JsonNode inner = root.path("sentences");
+                arrayNode = inner.isArray() ? inner : objectMapper.createArrayNode().add(inner);
+            }
+
             List<SentencePair> result = new ArrayList<>();
-            for (JsonNode node : sentences) {
-                result.add(new SentencePair(
-                        node.path("english").asText(),
-                        node.path("portuguese").asText()
-                ));
+            for (JsonNode node : arrayNode) {
+                String english    = node.path("english").asText();
+                String portuguese = node.path("portuguese").asText();
+                if (!english.isBlank() && !portuguese.isBlank()) {
+                    result.add(new SentencePair(english, portuguese));
+                }
             }
             return result;
         } catch (Exception e) {
