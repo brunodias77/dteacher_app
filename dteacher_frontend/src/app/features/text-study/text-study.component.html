@@ -120,7 +120,7 @@
                 <!-- Content -->
                 <div class="flex-1 min-w-0 space-y-3">
                   <div class="text-[18px] leading-snug text-text-hi font-medium font-display">
-                    {{ item.original }}
+                    <app-clickable-sentence [text]="item.original" (wordClicked)="onWordClick($event)" />
                   </div>
                   <div
                     class="text-[13px] text-text-mid blur-sm hover:blur-none transition-all duration-300 cursor-help"
@@ -138,7 +138,13 @@
                 </div>
 
                 <!-- Volume button -->
-                <button type="button" class="chip-btn ghost flex-shrink-0" title="Ouvir pronúncia">
+                <button
+                  type="button"
+                  class="chip-btn ghost flex-shrink-0"
+                  [class.text-accent]="speakingText() === item.original"
+                  title="Ouvir pronúncia"
+                  (click)="speak(item.original)"
+                >
                   <app-icon name="volume" [size]="12" />
                 </button>
               </div>
@@ -185,3 +191,12 @@
   }
 
 </div>
+
+@if (selectedWord()) {
+  <app-word-flashcard-dialog
+    [word]="selectedWord()!"
+    [loading]="wordAdding()"
+    (confirmed)="onConfirmWordFlashcard($event)"
+    (cancelled)="onCancelWordFlashcard()"
+  />
+}

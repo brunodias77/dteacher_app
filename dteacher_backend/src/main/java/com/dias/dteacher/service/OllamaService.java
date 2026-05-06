@@ -143,7 +143,7 @@ public class OllamaService {
     private String generate(String prompt, float temperature) {
         var body = Map.of(
                 "model", model,
-                "prompt", prompt,
+                "messages", List.of(Map.of("role", "user", "content", prompt)),
                 "stream", false,
                 "format", "json",
                 "options", Map.of("temperature", temperature)
@@ -151,7 +151,7 @@ public class OllamaService {
 
         try {
             String raw = restClient.post()
-                    .uri(baseUrl + "/api/generate")
+                    .uri(baseUrl + "/api/chat")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -163,7 +163,7 @@ public class OllamaService {
                 throw new BadGatewayException("Serviço de IA retornou resposta inválida.");
             }
 
-            String text = response.path("response").asText();
+            String text = response.path("message").path("content").asText();
             log.debug("Ollama raw response: {}", text);
             return text;
         } catch (BadGatewayException e) {

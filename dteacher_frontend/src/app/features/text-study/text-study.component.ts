@@ -2,6 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { HttpErrorResponse } from '@angular/common/http';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { TextStudyService } from '../../core/services/text-study.service';
+import { FlashcardService } from '../../core/services/flashcard.service';
+import { ClickableSentenceComponent } from '../../shared/components/clickable-sentence/clickable-sentence.component';
+import { WordFlashcardDialogComponent } from '../../shared/components/word-flashcard-dialog/word-flashcard-dialog.component';
 
 export interface AnalysisItem {
   original: string;
@@ -24,20 +27,42 @@ export interface TextResult {
   selector: 'app-text-study',
   templateUrl: './text-study.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [IconComponent],
+  imports: [IconComponent, ClickableSentenceComponent, WordFlashcardDialogComponent],
 })
 export class TextStudyComponent {
-  private textStudyService = inject(TextStudyService);
+  private textStudyService  = inject(TextStudyService);
+  private flashcardService  = inject(FlashcardService);
 
   readonly textInput = signal('');
   readonly studying  = signal(false);
   readonly errorMsg  = signal('');
   readonly result    = signal<TextResult | null>(null);
 
+  readonly speakingText  = signal('');
+  readonly selectedWord  = signal<string | null>(null);
+  readonly wordAdding    = signal(false);
+
   readonly charCount = computed(() => this.textInput().length);
   readonly wordCount = computed(
     () => this.textInput().split(/\s+/).filter(Boolean).length,
   );
+
+  speak(text: string): void {
+    if (!('speechSynthesis' in window)) return;
+    if (this.speakingText() === text) {
+      window.speechSynthesis.cancel();
+      this.speakingText.set('');
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.lang = 'en-US';
+    utt.rate = 0.9;
+    utt.onstart = () => this.speakingText.set(text);
+    utt.onend = () => this.speakingText.set('');
+    utt.onerror = () => this.speakingText.set('');
+    window.speechSynthesis.speak(utt);
+  }
 
   padIndex(n: number): string {
     return String(n + 1).padStart(2, '0');
@@ -85,5 +110,28 @@ export class TextStudyComponent {
 
   onKeydown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') this.analyse();
+  }
+
+  onWordClick(word: string): void {
+    this.selectedWord.set(word);
+  }
+
+  onConfirmWordFlashcard(portuguese: string): void {
+    const word = this.selectedWord();
+    if (!word) return;
+    this.wordAdding.set(true);
+    this.flashcardService.add({ english: word, portuguese, source: 'text-study-word' }).subscribe({
+      next: () => {
+        this.wordAdding.set(false);
+        this.selectedWord.set(null);
+      },
+      error: () => {
+        this.wordAdding.set(false);
+      },
+    });
+  }
+
+  onCancelWordFlashcard(): void {
+    this.selectedWord.set(null);
   }
 }

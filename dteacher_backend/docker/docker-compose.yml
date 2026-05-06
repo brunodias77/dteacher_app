@@ -12,10 +12,10 @@ services:
       - dteacher_pgdata:/var/lib/postgresql/data
 
   ollama:
-    image: ollama/ollama
+    image: alpine/ollama
     container_name: ollama_container
     ports:
-      - "11434:11434"
+      - "11435:11434"
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
@@ -31,7 +31,7 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    command: ["-s", "-X", "POST", "http://ollama:11434/api/pull", "-H", "Content-Type: application/json", "-d", "{\"name\":\"gemma3:4b\"}", "--max-time", "600"]
+    command: ["-s", "-X", "POST", "http://ollama:11434/api/pull", "-H", "Content-Type: application/json", "-d", "{\"name\":\"llama3.2\"}", "--max-time", "600"]
     restart: "no"
 
 volumes:
