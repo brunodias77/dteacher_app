@@ -1,51 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { IconComponent } from '../../shared/components/icon/icon.component';
+import { VocabularyListResponse, VocabularyService, VocabularyWordResponse } from '../../core/services/vocabulary.service';
 
 export interface VocabWord {
+  id: string;
   word: string;
   translation: string;
   example: string;
   exampleTranslation: string;
 }
-
-const MOCK_WORDS: VocabWord[] = [
-  {
-    word: 'commute',
-    translation: 'deslocamento / ir para o trabalho',
-    example: 'My daily commute takes about 45 minutes.',
-    exampleTranslation: 'O meu deslocamento diário demora cerca de 45 minutos.',
-  },
-  {
-    word: 'postpone',
-    translation: 'adiar',
-    example: 'We had to postpone the meeting until Friday.',
-    exampleTranslation: 'Tivemos de adiar a reunião para sexta-feira.',
-  },
-  {
-    word: 'struggle',
-    translation: 'dificuldade / lutar',
-    example: 'She struggles to wake up early every morning.',
-    exampleTranslation: 'Ela tem dificuldade em acordar cedo todas as manhãs.',
-  },
-  {
-    word: 'afford',
-    translation: 'ter condições de',
-    example: "I can't afford a new laptop right now.",
-    exampleTranslation: 'Não tenho condições de comprar um portátil novo agora.',
-  },
-  {
-    word: 'awkward',
-    translation: 'constrangedor / desajeitado',
-    example: 'There was an awkward silence after the joke.',
-    exampleTranslation: 'Houve um silêncio constrangedor depois da piada.',
-  },
-  {
-    word: 'deadline',
-    translation: 'prazo',
-    example: 'We need to meet the deadline by Friday.',
-    exampleTranslation: 'Precisamos de cumprir o prazo até sexta-feira.',
-  },
-];
 
 @Component({
   selector: 'app-vocabulary',
@@ -54,10 +18,25 @@ const MOCK_WORDS: VocabWord[] = [
   imports: [IconComponent],
 })
 export class VocabularyComponent {
-  readonly words      = signal<VocabWord[]>(MOCK_WORDS);
+  private vocabularyService = inject(VocabularyService);
+
+  readonly words      = signal<VocabWord[]>([]);
+  readonly loading    = signal(true);
   readonly filter     = signal('');
   readonly manualWord = signal('');
   readonly adding     = signal(false);
+  readonly apiErrors  = signal<string[]>([]);
+  readonly speakingId = signal<string | null>(null);
+
+  constructor() {
+    this.vocabularyService.list().subscribe({
+      next: (res: VocabularyListResponse) => {
+        this.words.set(res.words.map(toVocabWord));
+        this.loading.set(false);
+      },
+      error: () => this.loading.set(false),
+    });
+  }
 
   readonly filtered = computed(() => {
     const q = this.filter().toLowerCase();
@@ -78,15 +57,27 @@ export class VocabularyComponent {
   addWord(): void {
     const w = this.manualWord().trim();
     if (!w || this.adding()) return;
-    this.words.update(list => [
-      { word: w, translation: '—', example: '—', exampleTranslation: '' },
-      ...list,
-    ]);
-    this.manualWord.set('');
+
+    this.adding.set(true);
+    this.apiErrors.set([]);
+
+    this.vocabularyService.add(w).subscribe({
+      next: (res: VocabularyWordResponse) => {
+        this.words.update(list => [toVocabWord(res), ...list]);
+        this.manualWord.set('');
+        this.adding.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        const body = err.error as { errors?: string[] } | undefined;
+        this.apiErrors.set(body?.errors ?? ['Erro ao adicionar palavra. Tente novamente.']);
+        this.adding.set(false);
+      },
+    });
   }
 
   onManualWordInput(event: Event): void {
     this.manualWord.set((event.target as HTMLInputElement).value);
+    this.apiErrors.set([]);
   }
 
   onFilterChange(event: Event): void {
@@ -96,4 +87,36 @@ export class VocabularyComponent {
   onAddKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter') this.addWord();
   }
+
+  speak(word: VocabWord): void {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+
+    if (this.speakingId() === word.id) {
+      synth.cancel();
+      this.speakingId.set(null);
+      return;
+    }
+
+    synth.cancel();
+    const utter = new SpeechSynthesisUtterance(word.word);
+    utter.lang = 'en-US';
+    utter.rate = 0.9;
+
+    utter.onstart = () => this.speakingId.set(word.id);
+    utter.onend   = () => this.speakingId.set(null);
+    utter.onerror = () => this.speakingId.set(null);
+
+    synth.speak(utter);
+  }
+}
+
+function toVocabWord(r: VocabularyWordResponse): VocabWord {
+  return {
+    id: r.id,
+    word: r.word,
+    translation: r.translation,
+    example: r.example,
+    exampleTranslation: r.exampleTranslation,
+  };
 }

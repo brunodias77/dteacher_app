@@ -28,7 +28,7 @@ public class FlashcardController {
     public ResponseEntity<?> list(@AuthenticationPrincipal UserDetails userDetails) {
         return listFlashcardsUseCase.execute(new ListFlashcardsRequest(userDetails.getUsername()))
                 .fold(
-                        n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                        Controllers::unprocessable,
                         body -> ResponseEntity.ok(body)
                 );
     }
@@ -44,7 +44,7 @@ public class FlashcardController {
                 body.source()
         );
         return createFlashcardUseCase.execute(request).fold(
-                n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                Controllers::unprocessable,
                 body2 -> ResponseEntity.status(HttpStatus.CREATED).body(body2)
         );
     }
@@ -56,7 +56,7 @@ public class FlashcardController {
             @RequestBody ReviewBody body) {
         var request = new ReviewFlashcardRequest(userDetails.getUsername(), id, body.grade());
         return reviewFlashcardUseCase.execute(request).fold(
-                n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                Controllers::unprocessable,
                 resp -> ResponseEntity.ok(resp)
         );
     }

@@ -22,7 +22,7 @@ public class MeController {
     @GetMapping("/preferences")
     public ResponseEntity<?> getPreferences(@AuthenticationPrincipal UserDetails userDetails) {
         return getPreferencesUseCase.execute(new GetPreferencesRequest(userDetails.getUsername())).fold(
-                n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                Controllers::unprocessable,
                 body -> ResponseEntity.ok(body)
         );
     }
@@ -41,7 +41,7 @@ public class MeController {
                 body.lastActiveTab()
         );
         return updatePreferencesUseCase.execute(request).fold(
-                n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                Controllers::unprocessable,
                 body2 -> ResponseEntity.ok(body2)
         );
     }

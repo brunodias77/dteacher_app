@@ -23,7 +23,7 @@ public class GeneratorController {
     @PostMapping("/sentences")
     public ResponseEntity<?> generate(@RequestBody GenerateSentencesRequest request) {
         return generateSentencesUseCase.execute(request).fold(
-                n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                Controllers::unprocessable,
                 body -> ResponseEntity.ok(body)
         );
     }
@@ -31,7 +31,7 @@ public class GeneratorController {
     @PostMapping("/translate")
     public ResponseEntity<?> translate(@RequestBody TranslateWordRequest request) {
         return translateWordUseCase.execute(request).fold(
-                n    -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(n),
+                Controllers::unprocessable,
                 body -> ResponseEntity.ok(body)
         );
     }

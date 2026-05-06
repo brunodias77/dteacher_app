@@ -30,6 +30,12 @@ public class OllamaService {
 
     public record WordEnrichment(String word, String translation, String example, String exampleTranslation) {}
 
+    public record SentenceAnalysis(String sentence, String translation, String notes) {}
+
+    public record AnkiCard(String english, String portuguese) {}
+
+    public record TextAnalysisResult(String overview, List<SentenceAnalysis> analysis, List<AnkiCard> ankiCards) {}
+
     public List<SentencePair> generateSentences(String words) {
         String prompt = """
                 Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
@@ -66,6 +72,72 @@ public class OllamaService {
                 """.formatted(word.strip());
 
         return parseTranslation(generate(prompt, 0.1f));
+    }
+
+    public TextAnalysisResult analyzeText(String text) {
+        String prompt = """
+                Você é um professor de inglês para brasileiros adultos.
+                Analise o texto em inglês abaixo frase por frase.
+                Para cada frase, forneça a tradução em português e uma nota gramatical ou de vocabulário útil para um estudante de nível intermediário.
+                Também gere até 5 flashcards com palavras ou expressões importantes do texto.
+
+                Texto:
+                %s
+
+                Responda SOMENTE com JSON no seguinte formato (sem texto adicional):
+                {
+                  "overview": "visão geral do texto em português (2-3 frases)",
+                  "analysis": [
+                    {"sentence": "frase original", "translation": "tradução", "notes": "nota gramatical ou de vocabulário"}
+                  ],
+                  "ankiCards": [
+                    {"english": "palavra ou expressão", "portuguese": "tradução"}
+                  ]
+                }
+                """.formatted(text.strip());
+
+        return parseTextAnalysis(generate(prompt, 0.3f));
+    }
+
+    private TextAnalysisResult parseTextAnalysis(String text) {
+        try {
+            if (text == null || text.isBlank()) {
+                throw new IllegalStateException("Resposta vazia do modelo");
+            }
+            String json = stripMarkdown(text);
+            JsonNode root = objectMapper.readTree(json);
+
+            String overview = root.path("overview").asText("");
+
+            List<SentenceAnalysis> analysis = new ArrayList<>();
+            JsonNode analysisNode = root.path("analysis");
+            if (analysisNode.isArray()) {
+                for (JsonNode n : analysisNode) {
+                    String sentence    = n.path("sentence").asText();
+                    String translation = n.path("translation").asText();
+                    String notes       = n.path("notes").asText(null);
+                    if (!sentence.isBlank()) {
+                        analysis.add(new SentenceAnalysis(sentence, translation, notes));
+                    }
+                }
+            }
+
+            List<AnkiCard> ankiCards = new ArrayList<>();
+            JsonNode cardsNode = root.path("ankiCards");
+            if (cardsNode.isArray()) {
+                for (JsonNode n : cardsNode) {
+                    String english    = n.path("english").asText();
+                    String portuguese = n.path("portuguese").asText();
+                    if (!english.isBlank() && !portuguese.isBlank()) {
+                        ankiCards.add(new AnkiCard(english, portuguese));
+                    }
+                }
+            }
+
+            return new TextAnalysisResult(overview, analysis, ankiCards);
+        } catch (Exception e) {
+            throw new IllegalStateException("Falha ao processar análise de texto", e);
+        }
     }
 
     private String generate(String prompt, float temperature) {
