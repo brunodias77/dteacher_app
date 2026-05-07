@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { IconComponent } from '../../shared/components/icon/icon.component';
 import { TextStudyService } from '../../core/services/text-study.service';
 import { FlashcardService } from '../../core/services/flashcard.service';
@@ -41,6 +43,10 @@ export class TextStudyComponent {
   readonly speakingText  = signal('');
   readonly selectedWord  = signal<string | null>(null);
   readonly wordAdding    = signal(false);
+
+  readonly ankiAdded     = signal<Set<number>>(new Set());
+  readonly ankiAddingIdx = signal<number | null>(null);
+  readonly ankiAddingAll = signal(false);
 
   readonly charCount = computed(() => this.textInput().length);
   readonly wordCount = computed(
@@ -102,6 +108,9 @@ export class TextStudyComponent {
     this.result.set(null);
     this.textInput.set('');
     this.errorMsg.set('');
+    this.ankiAdded.set(new Set());
+    this.ankiAddingIdx.set(null);
+    this.ankiAddingAll.set(false);
   }
 
   onTextInput(event: Event): void {
@@ -133,5 +142,41 @@ export class TextStudyComponent {
 
   onCancelWordFlashcard(): void {
     this.selectedWord.set(null);
+  }
+
+  addAnkiCard(card: AnkiCard, idx: number): void {
+    if (this.ankiAdded().has(idx) || this.ankiAddingIdx() !== null || this.ankiAddingAll()) return;
+    this.ankiAddingIdx.set(idx);
+    this.flashcardService.add({ english: card.front, portuguese: card.back, source: 'text_study' }).subscribe({
+      next: () => {
+        this.ankiAdded.update(s => new Set([...s, idx]));
+        this.ankiAddingIdx.set(null);
+      },
+      error: () => {
+        this.ankiAddingIdx.set(null);
+      },
+    });
+  }
+
+  addAllAnkiCards(cards: AnkiCard[]): void {
+    if (this.ankiAddingAll()) return;
+    const remaining = cards
+      .map((card, idx) => ({ card, idx }))
+      .filter(({ idx }) => !this.ankiAdded().has(idx));
+    if (remaining.length === 0) return;
+    this.ankiAddingAll.set(true);
+    forkJoin(
+      remaining.map(({ card, idx }) =>
+        this.flashcardService.add({ english: card.front, portuguese: card.back, source: 'text_study' }).pipe(
+          map(() => idx),
+          catchError(() => of(null)),
+        )
+      )
+    ).subscribe(results => {
+      results.forEach(idx => {
+        if (idx !== null) this.ankiAdded.update(s => new Set([...s, idx]));
+      });
+      this.ankiAddingAll.set(false);
+    });
   }
 }

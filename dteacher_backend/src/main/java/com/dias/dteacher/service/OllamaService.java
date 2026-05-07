@@ -36,6 +36,10 @@ public class OllamaService {
 
     public record TextAnalysisResult(String overview, List<SentenceAnalysis> analysis, List<AnkiCard> ankiCards) {}
 
+    public record ChatTurn(String sender, String content) {}
+
+    public record ChatResponse(String text, String translation, String feedback) {}
+
     public List<SentencePair> generateSentences(String words) {
         String prompt = """
                 Você é um professor de inglês experiente ajudando um estudante brasileiro adulto.
@@ -74,6 +78,44 @@ public class OllamaService {
         return parseTranslation(generate(prompt, 0.1f));
     }
 
+    public ChatResponse chat(String cefrLevel, List<ChatTurn> history, String userMessage) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("""
+                Você é Alex, um parceiro de conversação em inglês amigável e encorajador, ajudando um adulto brasileiro a praticar inglês.
+                Adapte vocabulário, complexidade gramatical e tópicos ao nível CEFR %s.
+                Suas respostas em inglês devem ser naturais, conversacionais e adequadas ao nível.
+
+                REGRAS OBRIGATÓRIAS:
+                - O campo "text" deve ser SEMPRE em inglês (sua resposta na conversa).
+                - O campo "translation" deve ser SEMPRE em português brasileiro (tradução do campo "text").
+                - O campo "feedback" deve ser SEMPRE em português brasileiro — nunca em inglês.
+                  O feedback comenta brevemente o inglês que o usuário usou na última mensagem: gramática, vocabulário ou pronúncia. Seja encorajador.
+
+                """.formatted(cefrLevel));
+
+        if (!history.isEmpty()) {
+            prompt.append("Conversa até agora:\n");
+            for (ChatTurn turn : history) {
+                String role = "AI".equals(turn.sender()) ? "Alex" : "Usuário";
+                prompt.append(role).append(": ").append(turn.content()).append("\n");
+            }
+            prompt.append("\n");
+        }
+
+        prompt.append("Usuário: ").append(userMessage.strip()).append("\n\n");
+        prompt.append("""
+                Responda SOMENTE com um objeto JSON neste formato exato (sem nenhum texto adicional):
+                {"text":"<resposta em INGLÊS>","translation":"<tradução em PORTUGUÊS BRASILEIRO>","feedback":"<comentário em PORTUGUÊS BRASILEIRO>"}
+
+                EXEMPLO DO FORMATO ESPERADO:
+                {"text":"That's great! What did you do on the weekend?","translation":"Que ótimo! O que você fez no fim de semana?","feedback":"Muito bem! Sua frase está correta e natural."}
+
+                ATENÇÃO: os campos \\"translation\\" e \\"feedback\\" NUNCA podem estar em inglês.
+                """);
+
+        return parseChatResponse(generate(prompt.toString(), 0.7f));
+    }
+
     public TextAnalysisResult analyzeText(String text) {
         String prompt = """
                 Você é um professor de inglês para brasileiros adultos.
@@ -97,6 +139,21 @@ public class OllamaService {
                 """.formatted(text.strip());
 
         return parseTextAnalysis(generate(prompt, 0.3f));
+    }
+
+    private ChatResponse parseChatResponse(String text) {
+        try {
+            if (text == null || text.isBlank()) throw new IllegalStateException("Resposta vazia do modelo");
+            String json = stripMarkdown(text);
+            JsonNode node = objectMapper.readTree(json);
+            return new ChatResponse(
+                    node.path("text").asText(),
+                    node.path("translation").asText(null),
+                    node.path("feedback").asText(null)
+            );
+        } catch (Exception e) {
+            throw new IllegalStateException("Falha ao processar resposta do chat", e);
+        }
     }
 
     private TextAnalysisResult parseTextAnalysis(String text) {

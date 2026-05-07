@@ -161,9 +161,22 @@
             <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-2">04.2 · Mineração</div>
             <h2 class="text-[22px] font-semibold text-text-hi tracking-tight">Cartões prontos para o deck</h2>
           </div>
-          <button type="button" class="btn-primary shrink-0">
-            <app-icon name="layers" [size]="12" />
-            Adicionar todos
+          <button
+            type="button"
+            class="btn-primary shrink-0"
+            [disabled]="ankiAddingAll()"
+            (click)="addAllAnkiCards(r.ankiCards)"
+          >
+            @if (ankiAddingAll()) {
+              <svg class="w-[12px] h-[12px] animate-spin shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <circle class="opacity-20" cx="12" cy="12" r="10" stroke-width="2"/>
+                <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+              </svg>
+              A adicionar…
+            } @else {
+              <app-icon name="layers" [size]="12" />
+              Adicionar todos
+            }
           </button>
         </div>
 
@@ -174,8 +187,24 @@
                 <div class="font-mono text-[10px] uppercase tracking-[0.12em] text-text-dim">
                   Cartão {{ idx + 1 }}
                 </div>
-                <button type="button" class="chip-btn ghost" title="Adicionar ao deck">
-                  <app-icon name="plus" [size]="10" />
+                <button
+                  type="button"
+                  class="chip-btn ghost"
+                  [class.text-accent]="ankiAdded().has(idx)"
+                  [disabled]="ankiAdded().has(idx) || ankiAddingIdx() === idx || ankiAddingAll()"
+                  [title]="ankiAdded().has(idx) ? 'Já adicionado' : 'Adicionar ao deck'"
+                  (click)="addAnkiCard(card, idx)"
+                >
+                  @if (ankiAddingIdx() === idx) {
+                    <svg class="w-[10px] h-[10px] animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <circle class="opacity-20" cx="12" cy="12" r="10" stroke-width="2"/>
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke-width="2"/>
+                    </svg>
+                  } @else if (ankiAdded().has(idx)) {
+                    <app-icon name="check" [size]="10" />
+                  } @else {
+                    <app-icon name="plus" [size]="10" />
+                  }
                 </button>
               </div>
               <div class="text-[15px] text-text-hi font-medium mb-2 font-display">

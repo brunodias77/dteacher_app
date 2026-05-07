@@ -74,7 +74,7 @@
       </div>
 
       <!-- Messages -->
-      <div class="flex-1 overflow-y-auto p-5 space-y-4 flex flex-col">
+      <div #messageList class="flex-1 overflow-y-auto p-5 space-y-4 flex flex-col">
 
         <!-- Chat empty state -->
         @if (isChat() && chatMessages().length === 0 && !loading()) {
@@ -235,7 +235,12 @@
             <app-icon name="bulb" [size]="14" />
           </button>
         }
-        <button type="button" class="btn-primary flex-shrink-0" (click)="send()">
+        <button
+          type="button"
+          class="btn-primary flex-shrink-0"
+          [disabled]="loading() || !input().trim() || !sessionId()"
+          (click)="send()"
+        >
           <app-icon name="send" [size]="14" />
         </button>
       </div>
@@ -249,18 +254,30 @@
         <div class="surface p-4">
           <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-text-lo mb-3 flex justify-between items-center">
             Esta sessão
-            <button type="button" class="text-accent hover:underline text-[11px]">Nova</button>
+            <button
+              type="button"
+              class="text-accent hover:underline text-[11px] disabled:opacity-40 disabled:cursor-not-allowed"
+              [disabled]="loading()"
+              (click)="newSession()"
+            >
+              @if (loading()) { A criar… } @else { Nova Conversa }
+            </button>
           </div>
+          @if (errorMsg()) {
+            <p class="text-[11px] text-danger mb-2 flex items-center gap-1.5">
+              <app-icon name="alert" [size]="11" />
+              {{ errorMsg() }}
+            </p>
+          }
           <div class="space-y-3">
             <div>
               <label class="text-[12px] text-text-mid mb-1 block">Nível de Conversa</label>
               <select
                 class="input py-1.5 px-2 text-[12px] font-mono w-full"
-                [value]="chatLevel()"
                 (change)="onLevelChange($event)"
               >
                 @for (l of CEFR_LEVELS; track l) {
-                  <option [value]="l">{{ l }}</option>
+                  <option [value]="l" [selected]="l === chatLevel()">{{ l }}</option>
                 }
               </select>
             </div>
